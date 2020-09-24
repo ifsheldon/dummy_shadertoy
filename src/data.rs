@@ -119,38 +119,34 @@ pub trait Inverse<Output = Self>
 pub struct Mat4
 {
     pub(self) transposed: bool,
-    pub(self) data: [f32; 16],
-    inverse: RefCell<[f32; 16]>,
+    pub(self) data: [[f32; 4]; 4],
+    inverse: RefCell<[[f32; 4]; 4]>,
     inverted: RefCell<bool>
 }
 
 impl Mat4 {
     pub fn identity() -> Self
     {
-        let mut data = [0.; 16];
-        for i in 0..4
-        {
-            data[i * 4 + i] = 1.;
-        }
+        let mut data = [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.], [0., 0., 0., 1.]];
         Mat4
         {
             transposed: false,
             data,
-            inverse: RefCell::new([0.; 16]),
-            inverted: RefCell::new(false)
+            inverse: RefCell::new(data.clone()),
+            inverted: RefCell::new(true)
         }
     }
 
-    pub(crate) fn _new1(transposed: bool, data: [f32; 16]) -> Self
+    pub(crate) fn _new1(transposed: bool, data: [[f32; 4]; 4]) -> Self
     {
         Mat4 {
             transposed,
             data,
-            inverse: RefCell::new([0.0; 16]),
+            inverse: RefCell::new([[0.; 4]; 4]),
             inverted: RefCell::new(false)
         }
     }
-    pub(crate) fn _new2(transposed: bool, data: [f32; 16], inverse: RefCell<[f32; 16]>, inverted: RefCell<bool>) -> Self
+    pub(crate) fn _new2(transposed: bool, data: [[f32; 4]; 4], inverse: RefCell<[[f32; 4]; 4]>, inverted: RefCell<bool>) -> Self
     {
         Mat4 {
             transposed,
@@ -197,12 +193,12 @@ impl Mat4 {
     #[inline]
     fn transposed_get(&self, row: usize, col: usize) -> f32
     {
-        self.data[col * 4 + row]
+        self.data[col][row]
     }
     #[inline]
     fn get(&self, row: usize, col: usize) -> f32
     {
-        self.data[row * 4 + col]
+        self.data[row][col]
     }
 
     #[inline]
@@ -216,7 +212,7 @@ impl Mat4 {
 
     pub fn dot_mat(&self, other: &Mat4) -> Mat4
     {
-        let mut prod = [0.0; 16];
+        let mut prod = [[0.0; 4]; 4];
         let self_get = if self.transposed { Mat4::transposed_get } else { Mat4::get };
         let other_get = if other.transposed { Mat4::transposed_get } else { Mat4::get };
         let mut entry;
@@ -226,13 +222,13 @@ impl Mat4 {
                 for idx in 0..4 {
                     entry += self_get(self, row, idx) * other_get(other, idx, col);
                 }
-                prod[4 * row + col] = entry;
+                prod[row][col] = entry;
             }
         }
         return Mat4 {
             transposed: false,
             data: prod,
-            inverse: RefCell::new([0.0; 16]),
+            inverse: RefCell::new([[0.0; 4]; 4]),
             inverted: RefCell::new(false)
         }
     }
@@ -273,9 +269,9 @@ impl Mat for Mat4 {
             self.clear_inverse();
             if self.transposed
             {
-                self.data[col * 4 + row] = val;
+                self.data[col][row] = val;
             } else {
-                self.data[row * 4 + col] = val;
+                self.data[row][col] = val;
             }
             Ok(())
         }
@@ -290,26 +286,32 @@ impl Mat for Mat4 {
 impl ScalarMul for Mat4
 {
     fn scalar_mul(&self, s: f32) -> Self {
-        let mut data = [0.0; 16];
-        for i in 0..16
+        let mut data = self.data.clone();
+        for i in 0..4
         {
-            data[i] = self.data[i] * s;
+            for j in 0..4
+            {
+                data[i][j] *= s;
+            }
         }
         Mat4 {
             transposed: self.transposed,
             data,
-            inverse: RefCell::new([0.0; 16]), // optimization needed here
+            inverse: RefCell::new([[0.0; 4]; 4]), // optimization needed here
             inverted: RefCell::new(false)
         }
     }
 
     fn scalar_mul_(&mut self, s: f32) {
-        for i in 0..16
+        for i in 0..4
         {
-            self.data[i] *= s;
+            for j in 0..4
+            {
+                self.data[i][j] *= s;
+            }
         }
         self.inverted = RefCell::new(false);
-        self.inverse = RefCell::new([0.0; 16]);
+        self.inverse = RefCell::new([[0.; 4]; 4]);
     }
 }
 
@@ -323,12 +325,12 @@ impl Inverse for Mat4
 impl Transpose for Mat4
 {
     fn transpose(&self) -> Self {
-        let mut t_data: [f32; 16] = [0.0; 16];
+        let mut t_data: [[f32; 4]; 4] = [[0.; 4]; 4];
         if !self.transposed
         {
             for i in 0..4 {
                 for j in 0..4 {
-                    t_data[j * 4 + i] = self.data[i * 4 + j];
+                    t_data[i][j] = self.data[j][i];
                 }
             }
         } else {
@@ -338,7 +340,7 @@ impl Transpose for Mat4
         {
             transposed: false,
             data: t_data,
-            inverse: RefCell::new([0.0; 16]), // optimize later
+            inverse: RefCell::new([[0.; 4]; 4]), // optimize later
             inverted: RefCell::new(false)
         }
     }
@@ -354,37 +356,33 @@ impl Transpose for Mat4
 pub struct Mat3
 {
     transposed: bool,
-    data: [f32; 9],
-    inverse: RefCell<[f32; 9]>,
+    data: [[f32; 3]; 3],
+    inverse: RefCell<[[f32; 3]; 3]>,
     inverted: RefCell<bool>
 }
 
 impl Mat3 {
     pub fn identity() -> Self
     {
-        let mut data = [0.; 9];
-        for i in 0..3
-        {
-            data[i * 3 + i] = 1.;
-        }
+        let data = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
         Mat3
         {
             transposed: false,
             data,
-            inverse: RefCell::new([0.; 9]),
-            inverted: RefCell::new(false)
+            inverse: RefCell::new([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+            inverted: RefCell::new(true)
         }
     }
-    pub(crate) fn _new1(transposed: bool, data: [f32; 9]) -> Self
+    pub(crate) fn _new1(transposed: bool, data: [[f32; 3]; 3]) -> Self
     {
         Mat3 {
             transposed,
             data,
-            inverse: RefCell::new([0.0; 9]),
+            inverse: RefCell::new([[0.; 3]; 3]),
             inverted: RefCell::new(false)
         }
     }
-    pub(crate) fn _new2(transposed: bool, data: [f32; 9], inverse: RefCell<[f32; 9]>, inverted: RefCell<bool>) -> Self
+    pub(crate) fn _new2(transposed: bool, data: [[f32; 3]; 3], inverse: RefCell<[[f32; 3]; 3]>, inverted: RefCell<bool>) -> Self
     {
         Mat3 {
             transposed,
@@ -431,7 +429,7 @@ impl Mat3 {
     #[inline]
     fn transposed_get(&self, row: usize, col: usize) -> f32
     {
-        self.data[col * 3 + row]
+        self.data[col][row]
     }
 
     #[inline]
@@ -446,12 +444,12 @@ impl Mat3 {
     #[inline]
     fn get(&self, row: usize, col: usize) -> f32
     {
-        self.data[row * 3 + col]
+        self.data[row][col]
     }
 
     pub fn dot_mat(&self, other: &Mat3) -> Mat3
     {
-        let mut prod = [0.0; 9];
+        let mut prod = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]];
         let self_get = if self.transposed { Mat3::transposed_get } else { Mat3::get };
         let other_get = if other.transposed { Mat3::transposed_get } else { Mat3::get };
         let mut entry;
@@ -461,13 +459,13 @@ impl Mat3 {
                 for idx in 0..3 {
                     entry += self_get(self, row, idx) * other_get(other, idx, col);
                 }
-                prod[3 * row + col] = entry;
+                prod[row][col] = entry;
             }
         }
         return Mat3 {
             transposed: false,
             data: prod,
-            inverse: RefCell::new([0.0; 9]),
+            inverse: RefCell::new([[0.0; 3]; 3]),
             inverted: RefCell::new(false)
         }
     }
@@ -508,9 +506,9 @@ impl Mat for Mat3 {
             self.clear_inverse();
             if self.transposed
             {
-                self.data[col * 3 + row] = val;
+                self.data[col][row] = val;
             } else {
-                self.data[row * 3 + col] = val;
+                self.data[row][col] = val;
             }
             Ok(())
         }
@@ -524,38 +522,44 @@ impl Mat for Mat3 {
 impl ScalarMul for Mat3
 {
     fn scalar_mul(&self, s: f32) -> Self {
-        let mut data = [0.0; 9];
-        for i in 0..9
+        let mut data = self.data.clone();
+        for i in 0..3
         {
-            data[i] = self.data[i] * s;
+            for j in 0..3
+            {
+                data[i][j] *= s;
+            }
         }
         Mat3 {
             transposed: self.transposed,
             data,
-            inverse: RefCell::new([0.0; 9]), // optimization needed here
+            inverse: RefCell::new([[0.0; 3]; 3]), // optimization needed here
             inverted: RefCell::new(false)
         }
     }
 
     fn scalar_mul_(&mut self, s: f32) {
-        for i in 0..9
+        for i in 0..3
         {
-            self.data[i] *= s;
+            for j in 0..3
+            {
+                self.data[i][j] *= s;
+            }
         }
         self.inverted = RefCell::new(false);
-        self.inverse = RefCell::new([0.0; 9]);
+        self.inverse = RefCell::new([[0.0; 3]; 3]);
     }
 }
 
 impl Transpose for Mat3
 {
     fn transpose(&self) -> Self {
-        let mut t_data: [f32; 9] = [0.0; 9];
+        let mut t_data: [[f32; 3]; 3] = [[0.0; 3]; 3];
         if !self.transposed
         {
             for i in 0..3 {
                 for j in 0..3 {
-                    t_data[j * 3 + i] = self.data[i * 3 + j];
+                    t_data[j][i] = self.data[i][j];
                 }
             }
         } else {
@@ -564,7 +568,7 @@ impl Transpose for Mat3
         return Mat3 {
             transposed: false,
             data: t_data,
-            inverse: RefCell::new([0.0; 9]),
+            inverse: RefCell::new([[0.0; 3]; 3]),
             inverted: RefCell::new(false)
         }
     }
