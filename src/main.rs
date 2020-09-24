@@ -21,7 +21,6 @@ const WIDTH_HF: f32 = WIDTH_F / 2.;
 const HEIGHT: usize = 512;
 const HEIGHT_F: f32 = HEIGHT as f32;
 const HEIGHT_HF: f32 = HEIGHT_F / 2.;
-const SIZE: [usize; 2] = [WIDTH, HEIGHT];
 
 #[derive(Copy, Clone)]
 pub struct Ray
