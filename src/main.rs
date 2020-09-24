@@ -399,7 +399,7 @@ pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat3, eye_pos: &Vec3, 
 pub fn get_ray_orthogonal(dw: f32, dh: f32, wc_ray_dir: &Vec3, frag_coord: &[f32; 2]) -> Ray
 {
     Ray {
-        origin: Vec3::new_xyz(dw * (frag_coord[0] - WIDTH_HF + 0.5), dh * (frag_coord[1] - HEIGHT_HF + 0.5), 0.),
+        origin: Vec3::new_xyz(- dw * (frag_coord[0] - WIDTH_HF + 0.5), dh * (frag_coord[1] - HEIGHT_HF + 0.5), 0.), // actually need to multiply with look_at
         direction: wc_ray_dir.clone()
     }
 }
@@ -438,7 +438,7 @@ pub fn shade(primary_ray: Ray, objects: &Vec<Object>, materials: &Vec<Material>,
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
-    const USE_PERSPECTIVE: bool = true;
+    const USE_PERSPECTIVE: bool = false;
     let now = Instant::now();
     let mut objects = Vec::new();
     let mut lights = Vec::new();
