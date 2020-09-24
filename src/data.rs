@@ -127,7 +127,7 @@ pub struct Mat4
 impl Mat4 {
     pub fn identity() -> Self
     {
-        let mut data = [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.], [0., 0., 0., 1.]];
+        let  data = [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.], [0., 0., 0., 1.]];
         Mat4
         {
             transposed: false,
@@ -158,35 +158,35 @@ impl Mat4 {
 
     pub(crate) fn _set_row(&mut self, row: usize, val: &Vec4)
     {
-        for i in 0..4 {
-            self._set_entry(row, i, val._get(i));
-        }
+        self._set_entry(row, 0, val.x());
+        self._set_entry(row, 1, val.y());
+        self._set_entry(row, 2, val.z());
+        self._set_entry(row, 3, val.w());
     }
 
     pub(crate) fn _get_row(&self, row: usize) -> Vec4
     {
-        let mut v = Vec4::_new();
-        for i in 0..4
-        {
-            v._set(i, self._get_entry(row, i));
-        }
+        let v = Vec4::new_xyzw(self._get_entry(row, 0),
+                                   self._get_entry(row, 1),
+                                   self._get_entry(row, 2),
+                                   self._get_entry(row, 3));
         return v;
     }
 
     pub(crate) fn _set_column(&mut self, column: usize, val: &Vec4)
     {
-        for i in 0..4 {
-            self._set_entry(i, column, val._get(i));
-        }
+        self._set_entry(0, column, val.x());
+        self._set_entry(1, column, val.y());
+        self._set_entry(2, column, val.z());
+        self._set_entry(3, column, val.w());
     }
 
     pub(crate) fn _get_column(&self, column: usize) -> Vec4
     {
-        let mut v = Vec4::_new();
-        for i in 0..4
-        {
-            v._set(i, self._get_entry(i, column));
-        }
+        let v = Vec4::new_xyzw(self._get_entry(0, column),
+                               self._get_entry(1, column),
+                               self._get_entry(2, column),
+                               self._get_entry(3, column));
         return v;
     }
 
@@ -287,13 +287,25 @@ impl ScalarMul for Mat4
 {
     fn scalar_mul(&self, s: f32) -> Self {
         let mut data = self.data.clone();
-        for i in 0..4
-        {
-            for j in 0..4
-            {
-                data[i][j] *= s;
-            }
-        }
+        data[0][0] *= s;
+        data[0][1] *= s;
+        data[0][2] *= s;
+        data[0][3] *= s;
+
+        data[1][0] *= s;
+        data[1][1] *= s;
+        data[1][2] *= s;
+        data[1][3] *= s;
+
+        data[2][0] *= s;
+        data[2][1] *= s;
+        data[2][2] *= s;
+        data[2][3] *= s;
+
+        data[3][0] *= s;
+        data[3][1] *= s;
+        data[3][2] *= s;
+        data[3][3] *= s;
         Mat4 {
             transposed: self.transposed,
             data,
@@ -303,13 +315,26 @@ impl ScalarMul for Mat4
     }
 
     fn scalar_mul_(&mut self, s: f32) {
-        for i in 0..4
-        {
-            for j in 0..4
-            {
-                self.data[i][j] *= s;
-            }
-        }
+        self.data[0][0] *= s;
+        self.data[0][1] *= s;
+        self.data[0][2] *= s;
+        self.data[0][3] *= s;
+
+        self.data[1][0] *= s;
+        self.data[1][1] *= s;
+        self.data[1][2] *= s;
+        self.data[1][3] *= s;
+
+        self.data[2][0] *= s;
+        self.data[2][1] *= s;
+        self.data[2][2] *= s;
+        self.data[2][3] *= s;
+
+        self.data[3][0] *= s;
+        self.data[3][1] *= s;
+        self.data[3][2] *= s;
+        self.data[3][3] *= s;
+
         self.inverted = RefCell::new(false);
         self.inverse = RefCell::new([[0.; 4]; 4]);
     }
@@ -394,35 +419,31 @@ impl Mat3 {
 
     pub(crate) fn _set_row(&mut self, row: usize, val: &Vec3)
     {
-        for i in 0..3 {
-            self._set_entry(row, i, val._get(i));
-        }
+        self._set_entry(row, 0, val.x());
+        self._set_entry(row, 1, val.y());
+        self._set_entry(row, 2, val.z());
     }
 
     pub(crate) fn _get_row(&self, row: usize) -> Vec3
     {
-        let mut v = Vec3::_new();
-        for i in 0..3
-        {
-            v._set(i, self._get_entry(row, i));
-        }
+        let v = Vec3::new_xyz(self._get_entry(row, 0),
+                              self._get_entry(row, 1),
+                              self._get_entry(row, 2));
         return v;
     }
 
     pub(crate) fn _set_column(&mut self, column: usize, val: &Vec3)
     {
-        for i in 0..3 {
-            self._set_entry(i, column, val._get(i));
-        }
+        self._set_entry(0, column, val.x());
+        self._set_entry(1, column, val.y());
+        self._set_entry(2, column, val.z());
     }
 
     pub(crate) fn _get_column(&self, column: usize) -> Vec3
     {
-        let mut v = Vec3::_new();
-        for i in 0..3
-        {
-            v._set(i, self._get_entry(i, column));
-        }
+        let mut v = Vec3::new_xyz(self._get_entry(0, column),
+                                  self._get_entry(1, column),
+                                  self._get_entry(2, column));
         return v;
     }
 
@@ -523,13 +544,18 @@ impl ScalarMul for Mat3
 {
     fn scalar_mul(&self, s: f32) -> Self {
         let mut data = self.data.clone();
-        for i in 0..3
-        {
-            for j in 0..3
-            {
-                data[i][j] *= s;
-            }
-        }
+        data[0][0] *= s;
+        data[0][1] *= s;
+        data[0][2] *= s;
+
+        data[1][0] *= s;
+        data[1][1] *= s;
+        data[1][2] *= s;
+
+        data[2][0] *= s;
+        data[2][1] *= s;
+        data[2][2] *= s;
+
         Mat3 {
             transposed: self.transposed,
             data,
@@ -539,13 +565,18 @@ impl ScalarMul for Mat3
     }
 
     fn scalar_mul_(&mut self, s: f32) {
-        for i in 0..3
-        {
-            for j in 0..3
-            {
-                self.data[i][j] *= s;
-            }
-        }
+        self.data[0][0] *= s;
+        self.data[0][1] *= s;
+        self.data[0][2] *= s;
+
+        self.data[1][0] *= s;
+        self.data[1][1] *= s;
+        self.data[1][2] *= s;
+
+        self.data[2][0] *= s;
+        self.data[2][1] *= s;
+        self.data[2][2] *= s;
+
         self.inverted = RefCell::new(false);
         self.inverse = RefCell::new([[0.0; 3]; 3]);
     }
@@ -614,10 +645,7 @@ impl Vec for Vec3
 
 impl VecDot for Vec3 {
     fn dot(&self, other: &Self) -> f32 {
-        let mut accum = 0.0;
-        for i in 0..3 {
-            accum += self.data[i] * other.data[i];
-        }
+        let accum = self.x() * other.x() + self.y() * other.y() + self.z() * other.z();
         return accum;
     }
 }
@@ -631,10 +659,7 @@ impl Add for Vec3
                 if other.transposed { [1, 3] } else { [3, 1] }
             ))
         } else {
-            let mut d = [0.0; 3];
-            for i in 0..3 {
-                d[i] = self.data[i] + other.data[i];
-            }
+            let d = [self.x() + other.x(), self.y() + other.y(), self.z() + other.z()];
             return Ok(Vec3 {
                 data: d,
                 transposed: self.transposed
@@ -643,10 +668,9 @@ impl Add for Vec3
     }
 
     fn add_(&mut self, other: &Self) {
-        for i in 0..3
-        {
-            self.data[i] += other.data[i];
-        }
+        self.data[0] += other.data[0];
+        self.data[1] += other.data[1];
+        self.data[2] += other.data[2];
     }
 
     fn _add(&self, v: &Vec3) -> Vec3
@@ -671,10 +695,7 @@ impl Minus for Vec3 {
                 if right.transposed { [1, 3] } else { [3, 1] }
             ))
         } else {
-            let mut d = [0.0; 3];
-            for i in 0..3 {
-                d[i] = self.data[i] - right.data[i];
-            }
+            let  d = [self.x() - right.x(), self.y() - right.y(), self.z() - right.z()];
             return Ok(Vec3 {
                 data: d,
                 transposed: self.transposed
@@ -683,7 +704,7 @@ impl Minus for Vec3 {
     }
 
     fn _minus(&self, right: &Self) -> Self {
-        let mut data = [self.data[0] - right.data[0],
+        let data = [self.data[0] - right.data[0],
             self.data[1] - right.data[1],
             self.data[2] - right.data[2],
         ];
@@ -734,18 +755,14 @@ impl Length for Vec3
 
 impl Product for Vec3 {
     fn product(&self, rhs: &Self) -> Self {
-        let mut v = self.clone();
-        for i in 0..3 {
-            v.data[i] *= rhs.data[i]
-        }
+        let v = Vec3::new_xyz(self.x() * rhs.x(), self.y() * rhs.y(), self.z() * rhs.z());
         return v;
     }
 
     fn product_(&mut self, rhs: &Self) {
-        for i in 0..3
-        {
-            self.data[i] *= rhs.data[i];
-        }
+        self.data[0] *= rhs.data[0];
+        self.data[1] *= rhs.data[1];
+        self.data[2] *= rhs.data[2];
     }
 }
 
@@ -767,17 +784,14 @@ impl Normalize for Vec3
 impl ScalarMul for Vec3
 {
     fn scalar_mul(&self, s: f32) -> Self {
-        let mut vec = self.clone();
-        for i in 0..3 {
-            vec.data[i] *= s;
-        }
+        let vec = Vec3::new_xyz(self.x() * s, self.y() * s, self.z() * s);
         return vec;
     }
 
     fn scalar_mul_(&mut self, s: f32) {
-        for i in 0..3 {
-            self.data[i] *= s;
-        }
+        self.data[0] *= s;
+        self.data[1] *= s;
+        self.data[2] *= s;
     }
 }
 
@@ -896,18 +910,15 @@ pub struct Vec4
 impl Product for Vec4
 {
     fn product(&self, rhs: &Self) -> Self {
-        let mut v = self.clone();
-        for i in 0..4 {
-            v.data[i] *= rhs.data[i]
-        }
+        let v = Vec4::new_xyzw(self.x() * rhs.x(), self.y() * rhs.y(), self.z() * rhs.z(), self.w() * rhs.w());
         return v;
     }
 
     fn product_(&mut self, rhs: &Self) {
-        for i in 0..4
-        {
-            self.data[i] *= rhs.data[i];
-        }
+        self.data[0] *= rhs.data[0];
+        self.data[1] *= rhs.data[1];
+        self.data[2] *= rhs.data[2];
+        self.data[3] *= rhs.data[3];
     }
 }
 
@@ -934,10 +945,7 @@ impl Vec for Vec4
 
 impl VecDot for Vec4 {
     fn dot(&self, other: &Self) -> f32 {
-        let mut accum = 0.0;
-        for i in 0..4 {
-            accum += self.data[i] * other.data[i];
-        }
+        let accum = self.x() * other.x() + self.y() * other.y() + self.z() * other.z() + self.w() * other.w();
         return accum;
     }
 }
@@ -951,10 +959,7 @@ impl Add for Vec4
                 if other.transposed { [1, 4] } else { [4, 1] }
             ))
         } else {
-            let mut d = [0.0; 4];
-            for i in 0..4 {
-                d[i] = self.data[i] + other.data[i];
-            }
+            let d = [self.x() + other.x(), self.y() + other.y(), self.z() + other.z(), self.w() + other.w()];
             return Ok(Vec4 {
                 data: d,
                 transposed: self.transposed
@@ -964,7 +969,7 @@ impl Add for Vec4
 
     fn _add(&self, v: &Vec4) -> Vec4
     {
-        let mut data = [self.data[0] + v.data[0],
+        let data = [self.data[0] + v.data[0],
             self.data[1] + v.data[1],
             self.data[2] + v.data[2],
             self.data[3] + v.data[3]];
@@ -976,10 +981,10 @@ impl Add for Vec4
     }
 
     fn add_(&mut self, other: &Self) {
-        for i in 0..4
-        {
-            self.data[i] += other.data[i];
-        }
+        self.data[0] += other.data[0];
+        self.data[1] += other.data[1];
+        self.data[2] += other.data[2];
+        self.data[3] += other.data[3];
     }
 }
 
@@ -991,10 +996,7 @@ impl Minus for Vec4 {
                 if right.transposed { [1, 4] } else { [4, 1] }
             ))
         } else {
-            let mut d = [0.0; 4];
-            for i in 0..4 {
-                d[i] = self.data[i] - right.data[i];
-            }
+            let d = [self.x() - right.x(), self.y() - right.y(), self.z() - right.z(), self.w() - right.w()];
             return Ok(Vec4 {
                 data: d,
                 transposed: self.transposed
@@ -1002,7 +1004,7 @@ impl Minus for Vec4 {
         }
     }
     fn _minus(&self, right: &Self) -> Self {
-        let mut data = [self.data[0] - right.data[0],
+        let  data = [self.data[0] - right.data[0],
             self.data[1] - right.data[1],
             self.data[2] - right.data[2],
             self.data[3] - right.data[3]
@@ -1059,17 +1061,15 @@ impl Normalize for Vec4
 impl ScalarMul for Vec4
 {
     fn scalar_mul(&self, s: f32) -> Self {
-        let mut vec = self.clone();
-        for i in 0..4 {
-            vec.data[i] *= s;
-        }
+        let vec = Vec4::new_xyzw(self.x() * s, self.y() * s, self.z() * s, self.w() * s);
         return vec;
     }
 
     fn scalar_mul_(&mut self, s: f32) {
-        for i in 0..4 {
-            self.data[i] *= s;
-        }
+        self.data[0] *= s;
+        self.data[1] *= s;
+        self.data[2] *= s;
+        self.data[3] *= s;
     }
 }
 
