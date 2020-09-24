@@ -233,11 +233,11 @@ pub fn look_at(eye: &Vec3, center: &Vec3, up: &Vec3) -> Mat4
 }
 
 #[inline]
-pub fn ray_direction_perspective(fov_radian: f32, size: &[usize; 2], frag_coord: &[f32; 2]) -> Vec3
+pub fn ray_direction_perspective(fov_radian: f32, frag_coord: &[f32; 2]) -> Vec3
 {
     let x = frag_coord[0] - WIDTH_HF + 0.5;
     let y = frag_coord[1] - HEIGHT_HF + 0.5;
-    let z = (HEIGHT_F as f32) / (fov_radian / 2.).tan();
+    let z = HEIGHT_F / (fov_radian / 2.).tan();
     let mut v = Vec3::new_xyz(x, y, -z);
     v.normalize_();
     return v;
@@ -310,7 +310,7 @@ pub fn cast_ray(ray: &Ray, pre_obj: i32, lights: &Vec<Light>, materials: &Vec<Ma
 
 pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat4, eye_pos: &Vec3, frag_coord: &[f32; 2]) -> Ray
 {
-    let view_init_direction = ray_direction_perspective(fov_radian, &SIZE, &frag_coord);
+    let view_init_direction = ray_direction_perspective(fov_radian, &frag_coord);
     let wc_ray_dir = Vec3::from(&look_at_mat.mat_vec_dot(&Vec4::from(&view_init_direction, 0.0)));
     let primary_ray = Ray {
         origin: eye_pos.clone(),
