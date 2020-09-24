@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use crate::err::{DimensionMismatchError, OutOfBoundError};
 
 pub trait VecDot<Rhs = Self>
@@ -132,7 +131,7 @@ impl Mat4 {
             data
         }
     }
-    pub(crate) fn _new2(transposed: bool, data: [[f32; 4]; 4], inverse: RefCell<[[f32; 4]; 4]>, inverted: RefCell<bool>) -> Self
+    pub(crate) fn _new2(transposed: bool, data: [[f32; 4]; 4]) -> Self
     {
         Mat4 {
             transposed,
@@ -379,7 +378,7 @@ impl Mat3 {
             data,
         }
     }
-    pub(crate) fn _new2(transposed: bool, data: [[f32; 3]; 3], inverse: RefCell<[[f32; 3]; 3]>, inverted: RefCell<bool>) -> Self
+    pub(crate) fn _new2(transposed: bool, data: [[f32; 3]; 3]) -> Self
     {
         Mat3 {
             transposed,

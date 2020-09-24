@@ -1,4 +1,4 @@
-use crate::data::{Vec3, Length, Vec4, Normalize, VecDot, Minus};
+use crate::data::{Vec3, Length, VecDot, Minus};
 
 pub fn sdf_sphere(ref_pos: &Vec3, radius: f32) -> f32 {
     ref_pos.get_length() - radius

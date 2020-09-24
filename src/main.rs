@@ -5,8 +5,6 @@ use std::time::Instant;
 use crate::shapes::{sdf_sphere, sdf_rounded_cylinder, sdf_plane, sdf_cylinder, sdf_cube, sdf_ellipsoid};
 use std::sync::{Arc, RwLock, mpsc};
 use std::thread;
-use std::borrow::Borrow;
-use std::cmp::Ordering;
 
 mod data;
 mod err;
@@ -18,7 +16,6 @@ const MAX_DIST: f32 = 100.0;
 const MAX_MARCHING_STEPS: i32 = 255;
 const NUM_ITERATIONS: i32 = 3;
 const BACKGROUND_COLOR: (f32, f32, f32) = (0.4, 0.4, 0.4);
-const FOV: f32 = 45.0;
 const WIDTH: usize = 640;
 const WIDTH_F: f32 = WIDTH as f32;
 const WIDTH_HF: f32 = WIDTH_F / 2.;
