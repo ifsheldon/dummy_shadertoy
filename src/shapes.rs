@@ -79,3 +79,31 @@ impl Shape for Cube
         return dist;
     }
 }
+
+pub struct Ellipsoid
+{
+    dimensions: Vec3
+}
+
+impl Ellipsoid
+{
+    pub fn new(dimensions: Vec3) -> Box<Self>
+    {
+        Box::new(Ellipsoid {
+            dimensions
+        })
+    }
+}
+
+impl Shape for Ellipsoid
+{
+    fn get_dist(&self, ref_pos: &Vec3) -> f32 {
+        let k0v = Vec3::new_xyz(ref_pos.x() / self.dimensions.x(), ref_pos.y() / self.dimensions.y(), ref_pos.z() / self.dimensions.z());
+        let k0 = k0v.get_length();
+        let k1v = Vec3::new_xyz(ref_pos.x() / (self.dimensions.x() * self.dimensions.x()),
+                                ref_pos.y() / (self.dimensions.y() * self.dimensions.y()),
+                                ref_pos.z() / (self.dimensions.z() * self.dimensions.z()));
+        let k1 = k1v.get_length();
+        return k0 * (k0 - 1.) / k1;
+    }
+}
