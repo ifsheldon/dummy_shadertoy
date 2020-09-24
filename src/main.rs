@@ -120,7 +120,8 @@ pub fn init_scene(objects: &mut Vec<Object>, materials: &mut Vec<Material>, ligh
     let identity = Mat4::identity();
     let transformation = translate_obj(identity, &Vec3::new_xyz(0., 0., 0.0));
     // let transformation = translate_obj(transformation, &Vec3::new_xyz(0.0, -0.2, 0.0));
-    add_sphere(objects, 1., 0, transformation);
+    // add_sphere(objects, 1., 0, transformation);
+    add_cube(objects, 1., 1., 1., 0, transformation);
 
     let material = Material {
         diffuse: Vec3::new(0.5),
@@ -218,7 +219,8 @@ pub fn look_at(eye: &Vec3, center: &Vec3, up: &Vec3) -> Mat4
     f.normalize_();
     let mut s = f.cross(up);
     s.normalize_();
-    let u = s.cross(&f);
+    let mut u = s.cross(&f);
+    u.normalize_();
     let mut m = Mat4::identity();
     let s = Vec4::from(&s, 0.);
     let u = Vec4::from(&u, 0.);
@@ -318,13 +320,13 @@ pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat4, eye_pos: &Vec3, 
     return primary_ray;
 }
 
-pub fn get_ray_orthogonal(view_plane_width: f32, view_plane_height: f32, frag_coord: &[f32; 2]) -> Ray
+pub fn get_ray_orthogonal(wc_ray_dir: &Vec3, view_plane_width: f32, view_plane_height: f32, frag_coord: &[f32; 2]) -> Ray
 {
     let dw = view_plane_width / WIDTH_F;
     let dh = view_plane_height / HEIGHT_F;
     Ray {
         origin: Vec3::new_xyz(dw * (frag_coord[0] - WIDTH_HF + 0.5), dh * (frag_coord[1] - HEIGHT_HF + 0.5), 0.),
-        direction: Vec3::new_xyz(0.0, 0.0, 1.)
+        direction: wc_ray_dir.clone()
     }
 }
 
@@ -360,8 +362,8 @@ pub fn shade(primary_ray: Ray, objects: &Vec<Object>, materials: &Vec<Material>,
 
 
 fn main() {
-    const VIEW_PLANE_WIDTH: f32 = 2.;
-    const VIEW_PLANE_HEIGHT: f32 = 2.;
+    const VIEW_PLANE_WIDTH: f32 = 5.;
+    const VIEW_PLANE_HEIGHT: f32 = 5.;
     let now = Instant::now();
     let mut use_perspective = false;
     let mut objects = Vec::new();
@@ -370,10 +372,11 @@ fn main() {
     init_scene(&mut objects, &mut materials, &mut lights);
     let fov_radian = FOV.to_radians();
 
-    let eye_pos = Vec3::new_xyz(0.0, 0.0, 5.0);
+    let eye_pos = Vec3::new_xyz(5.0, 5.0, 5.0);
     let center = Vec3::new(0.);
     let up = Vec3::new_xyz(0.0, 1.0, 0.0);
     let look_at_mat = look_at(&eye_pos, &center, &up);
+    let wc_ray_dir = Vec3::from(&look_at_mat.mat_vec_dot(&Vec4::new_xyzw(0., 0., 1., 0.)));
 
     let mut image = Image::new(WIDTH, HEIGHT);
     for y in 0..HEIGHT
@@ -382,7 +385,7 @@ fn main() {
         {
             let a = image.index_mut(XY(x, y));
             let frag_coord = [x as f32, y as f32];
-            let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(VIEW_PLANE_WIDTH, VIEW_PLANE_HEIGHT, &frag_coord) };
+            let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(&wc_ray_dir, VIEW_PLANE_WIDTH, VIEW_PLANE_HEIGHT, &frag_coord) };
             *a = to_color(&shade(primary_ray, &objects, &materials, &lights));
         }
     }
