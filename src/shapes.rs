@@ -107,3 +107,62 @@ impl Shape for Ellipsoid
         return k0 * (k0 - 1.) / k1;
     }
 }
+
+pub struct RoundedCylinder
+{
+    round_radius: f32,
+    radius: f32,
+    height: f32
+}
+
+impl RoundedCylinder {
+    pub fn new(radius: f32, round_radius: f32, height: f32) -> Box<Self>
+    {
+        Box::new(RoundedCylinder {
+            round_radius,
+            radius,
+            height
+        })
+    }
+}
+
+impl Shape for RoundedCylinder {
+    fn get_dist(&self, ref_pos: &Vec3) -> f32 {
+        let d1 = (ref_pos.x() * ref_pos.x() + ref_pos.z() * ref_pos.z()).sqrt() - 2. * self.radius + self.round_radius;
+        let d2 = ref_pos.y().abs() - self.height;
+        let d1_max = d1.max(0.);
+        let d2_max = d2.max(0.);
+        return f32::min(f32::max(d1, d2), 0.) + (d1_max * d1_max + d2_max * d2_max).sqrt() - self.round_radius;
+    }
+}
+
+
+pub struct Cylinder
+{
+    height: f32,
+    radius: f32
+}
+
+impl Cylinder
+{
+    pub fn new(radius: f32, height: f32) -> Box<Self>
+    {
+        Box::new(Cylinder {
+            height,
+            radius
+        })
+    }
+}
+
+
+impl Shape for Cylinder
+{
+    fn get_dist(&self, ref_pos: &Vec3) -> f32 {
+        let dx = (ref_pos.x() * ref_pos.x() + ref_pos.z() * ref_pos.z()).sqrt() - self.height;
+        let dy = ref_pos.y().abs() - self.radius;
+        let dx_max = dx.max(0.0);
+        let dy_max = dy.max(0.0);
+        return f32::min(f32::max(dx, dy), 0.0) + (dx_max * dx_max + dy_max * dy_max).sqrt();
+    }
+}
+
