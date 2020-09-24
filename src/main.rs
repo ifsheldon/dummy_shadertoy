@@ -233,11 +233,11 @@ pub fn look_at(eye: &Vec3, center: &Vec3, up: &Vec3) -> Mat4
 }
 
 #[inline]
-pub fn ray_direction_perspective(fov_radian: f32, size: &[usize; 2], frag_coord: &[usize; 2]) -> Vec3
+pub fn ray_direction_perspective(fov_radian: f32, size: &[usize; 2], frag_coord: &[f32; 2]) -> Vec3
 {
-    let x = frag_coord[0] as f32 - size[0] as f32 / 2.;
-    let y = frag_coord[1] as f32 - size[1] as f32 / 2.;
-    let z = (size[1] as f32) / (fov_radian / 2.).tan();
+    let x = frag_coord[0] - WIDTH_HF + 0.5;
+    let y = frag_coord[1] - HEIGHT_HF + 0.5;
+    let z = (HEIGHT_F as f32) / (fov_radian / 2.).tan();
     let mut v = Vec3::new_xyz(x, y, -z);
     v.normalize_();
     return v;
@@ -308,7 +308,7 @@ pub fn cast_ray(ray: &Ray, pre_obj: i32, lights: &Vec<Light>, materials: &Vec<Ma
     }
 }
 
-pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat4, eye_pos: &Vec3, frag_coord: &[usize; 2]) -> Ray
+pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat4, eye_pos: &Vec3, frag_coord: &[f32; 2]) -> Ray
 {
     let view_init_direction = ray_direction_perspective(fov_radian, &SIZE, &frag_coord);
     let wc_ray_dir = Vec3::from(&look_at_mat.mat_vec_dot(&Vec4::from(&view_init_direction, 0.0)));
@@ -319,17 +319,17 @@ pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat4, eye_pos: &Vec3, 
     return primary_ray;
 }
 
-pub fn get_ray_orthogonal(view_plane_width: f32, view_plane_height: f32, frag_coord: &[usize; 2]) -> Ray
+pub fn get_ray_orthogonal(view_plane_width: f32, view_plane_height: f32, frag_coord: &[f32; 2]) -> Ray
 {
     let dw = view_plane_width / WIDTH_F;
     let dh = view_plane_height / HEIGHT_F;
     Ray {
-        origin: Vec3::new_xyz(dw * (frag_coord[0] as f32 - WIDTH_HF + 0.5), dh * (frag_coord[1] as f32 - HEIGHT_HF + 0.5), 0.),
+        origin: Vec3::new_xyz(dw * (frag_coord[0] - WIDTH_HF + 0.5), dh * (frag_coord[1] - HEIGHT_HF + 0.5), 0.),
         direction: Vec3::new_xyz(0.0, 0.0, 1.)
     }
 }
 
-pub fn shade(primary_ray: Ray, objects: &Vec<Object>, materials: &Vec<Material>, lights: &Vec<Light>, frag_coord: [usize; 2]) -> Vec3
+pub fn shade(primary_ray: Ray, objects: &Vec<Object>, materials: &Vec<Material>, lights: &Vec<Light>) -> Vec3
 {
     let eps = Vec3::new(EPSILON);
     let mut next_ray = primary_ray.clone();
@@ -382,9 +382,9 @@ fn main() {
         for x in 0..WIDTH
         {
             let a = image.index_mut(XY(x, y));
-            let frag_coord = [x, y];
+            let frag_coord = [x as f32, y as f32];
             let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(VIEW_PLANE_WIDTH, VIEW_PLANE_HEIGHT, &frag_coord) };
-            *a = to_color(&shade(primary_ray, &objects, &materials, &lights, frag_coord));
+            *a = to_color(&shade(primary_ray, &objects, &materials, &lights));
         }
     }
 
