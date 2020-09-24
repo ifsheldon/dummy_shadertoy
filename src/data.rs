@@ -229,7 +229,7 @@ impl Mat4 {
 impl MatVecDot<Vec4> for Mat4
 {
     fn mat_vec_dot(&self, rhs: &Vec4) -> Vec4 {
-        let mut v = Vec4::new_xyzw(
+        let v = Vec4::new_xyzw(
             self._get_entry(0, 0) * rhs.x() + self._get_entry(0, 1) * rhs.y() + self._get_entry(0, 2) * rhs.z() + self._get_entry(0, 3) * rhs.w(),
             self._get_entry(1, 0) * rhs.x() + self._get_entry(1, 1) * rhs.y() + self._get_entry(1, 2) * rhs.z() + self._get_entry(1, 3) * rhs.w(),
             self._get_entry(2, 0) * rhs.x() + self._get_entry(2, 1) * rhs.y() + self._get_entry(2, 2) * rhs.z() + self._get_entry(2, 3) * rhs.w(),
@@ -446,7 +446,7 @@ impl Mat3 {
 
     pub(crate) fn _get_column(&self, column: usize) -> Vec3
     {
-        let mut v = Vec3::new_xyz(self._get_entry(0, column),
+        let v = Vec3::new_xyz(self._get_entry(0, column),
                                   self._get_entry(1, column),
                                   self._get_entry(2, column));
         return v;
@@ -500,7 +500,7 @@ impl Mat3 {
 impl MatVecDot<Vec3> for Mat3
 {
     fn mat_vec_dot(&self, rhs: &Vec3) -> Vec3 {
-        let mut v = Vec3::new_xyz(
+        let v = Vec3::new_xyz(
             self._get_entry(0, 0) * rhs.x() + self._get_entry(0, 1) * rhs.y() + self._get_entry(0, 2) * rhs.z(),
             self._get_entry(1, 0) * rhs.x() + self._get_entry(1, 1) * rhs.y() + self._get_entry(1, 2) * rhs.z(),
             self._get_entry(2, 0) * rhs.x() + self._get_entry(2, 1) * rhs.y() + self._get_entry(2, 2) * rhs.z(),
@@ -692,7 +692,7 @@ impl Add for Vec3
 
     fn _add(&self, v: &Vec3) -> Vec3
     {
-        let mut data = [self.data[0] + v.data[0],
+        let data = [self.data[0] + v.data[0],
             self.data[1] + v.data[1],
             self.data[2] + v.data[2],
         ];
