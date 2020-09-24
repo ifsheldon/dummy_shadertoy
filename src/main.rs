@@ -15,10 +15,10 @@ const MAX_MARCHING_STEPS: i32 = 255;
 const NUM_ITERATIONS: i32 = 5;
 const BACKGROUND_COLOR: (f32, f32, f32) = (0.5, 0.5, 0.5);
 const FOV: f32 = 45.0;
-const WIDTH: usize = 512;
+const WIDTH: usize = 640;
 const WIDTH_F: f32 = WIDTH as f32;
 const WIDTH_HF: f32 = WIDTH_F / 2.;
-const HEIGHT: usize = 512;
+const HEIGHT: usize = 480;
 const HEIGHT_F: f32 = HEIGHT as f32;
 const HEIGHT_HF: f32 = HEIGHT_F / 2.;
 
@@ -318,10 +318,9 @@ pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat3, eye_pos: &Vec3, 
     return primary_ray;
 }
 
-pub fn get_ray_orthogonal(wc_ray_dir: &Vec3, view_plane_width: f32, view_plane_height: f32, frag_coord: &[f32; 2]) -> Ray
+#[inline]
+pub fn get_ray_orthogonal(dw: f32, dh: f32, wc_ray_dir: &Vec3, frag_coord: &[f32; 2]) -> Ray
 {
-    let dw = view_plane_width / WIDTH_F;
-    let dh = view_plane_height / HEIGHT_F;
     Ray {
         origin: Vec3::new_xyz(dw * (frag_coord[0] - WIDTH_HF + 0.5), dh * (frag_coord[1] - HEIGHT_HF + 0.5), 0.),
         direction: wc_ray_dir.clone()
@@ -375,7 +374,8 @@ fn main() {
     let up = Vec3::new_xyz(0.0, 1.0, 0.0);
     let look_at_mat = look_at(&eye_pos, &center, &up);
     let wc_ray_dir = look_at_mat.mat_vec_dot(&Vec3::new_xyz(0., 0., 1.));
-
+    let dw = VIEW_PLANE_WIDTH / WIDTH_F;
+    let dh = VIEW_PLANE_HEIGHT / HEIGHT_F;
     let mut image = Image::new(WIDTH, HEIGHT);
     for y in 0..HEIGHT
     {
@@ -383,7 +383,7 @@ fn main() {
         {
             let a = image.index_mut(XY(x, y));
             let frag_coord = [x as f32, y as f32];
-            let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(&wc_ray_dir, VIEW_PLANE_WIDTH, VIEW_PLANE_HEIGHT, &frag_coord) };
+            let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
             *a = to_color(&shade(primary_ray, &objects, &materials, &lights));
         }
     }
