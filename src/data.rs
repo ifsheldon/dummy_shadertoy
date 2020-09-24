@@ -26,18 +26,10 @@ pub trait Mat
 
 pub(crate) trait _Mat: Mat
 {
-    fn _get_entry(&self, row: usize, col: usize) -> f32
-    {
-        self.get_entry(row, col).expect("Should NOT happen")
-    }
-    fn _set_entry(&mut self, row: usize, col: usize, val: f32)
-    {
-        self.set_entry(row, col, val).expect("Should NOT happen")
-    }
+    fn _get_entry(&self, row: usize, col: usize) -> f32;
+    fn _set_entry(&mut self, row: usize, col: usize, val: f32);
 }
 
-// set default implementation for all Mat
-impl<T: Mat> _Mat for T {}
 
 pub(crate) trait _Vec: Vec
 {
@@ -127,7 +119,7 @@ pub struct Mat4
 impl Mat4 {
     pub fn identity() -> Self
     {
-        let  data = [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.], [0., 0., 0., 1.]];
+        let data = [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.], [0., 0., 0., 1.]];
         Mat4
         {
             transposed: false,
@@ -167,9 +159,9 @@ impl Mat4 {
     pub(crate) fn _get_row(&self, row: usize) -> Vec4
     {
         let v = Vec4::new_xyzw(self._get_entry(row, 0),
-                                   self._get_entry(row, 1),
-                                   self._get_entry(row, 2),
-                                   self._get_entry(row, 3));
+                               self._get_entry(row, 1),
+                               self._get_entry(row, 2),
+                               self._get_entry(row, 3));
         return v;
     }
 
@@ -280,6 +272,23 @@ impl Mat for Mat4 {
     fn get_size(&self) -> [usize; 2]
     {
         [4, 4]
+    }
+}
+
+impl _Mat for Mat4
+{
+    fn _get_entry(&self, row: usize, col: usize) -> f32 {
+        if self.transposed { self.transposed_get(row, col) } else { self.get(row, col) }
+    }
+
+    fn _set_entry(&mut self, row: usize, col: usize, val: f32) {
+        self.clear_inverse();
+        if self.transposed
+        {
+            self.data[col][row] = val;
+        } else {
+            self.data[row][col] = val;
+        }
     }
 }
 
@@ -540,6 +549,23 @@ impl Mat for Mat3 {
     }
 }
 
+impl _Mat for Mat3
+{
+    fn _get_entry(&self, row: usize, col: usize) -> f32 {
+        if self.transposed { self.transposed_get(row, col) } else { self.get(row, col) }
+    }
+
+    fn _set_entry(&mut self, row: usize, col: usize, val: f32) {
+        self.clear_inverse();
+        if self.transposed
+        {
+            self.data[col][row] = val;
+        } else {
+            self.data[row][col] = val;
+        }
+    }
+}
+
 impl ScalarMul for Mat3
 {
     fn scalar_mul(&self, s: f32) -> Self {
@@ -695,7 +721,7 @@ impl Minus for Vec3 {
                 if right.transposed { [1, 3] } else { [3, 1] }
             ))
         } else {
-            let  d = [self.x() - right.x(), self.y() - right.y(), self.z() - right.z()];
+            let d = [self.x() - right.x(), self.y() - right.y(), self.z() - right.z()];
             return Ok(Vec3 {
                 data: d,
                 transposed: self.transposed
@@ -1004,7 +1030,7 @@ impl Minus for Vec4 {
         }
     }
     fn _minus(&self, right: &Self) -> Self {
-        let  data = [self.data[0] - right.data[0],
+        let data = [self.data[0] - right.data[0],
             self.data[1] - right.data[1],
             self.data[2] - right.data[2],
             self.data[3] - right.data[3]
