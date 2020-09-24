@@ -466,7 +466,7 @@ fn main() {
         }
     }
 
-    println!("Used {} ms to render the scene using Intel 7700HQ\n", now.elapsed().as_millis());
+    println!("Used {} ms to render the scene using one thread of Intel 7700HQ\n", now.elapsed().as_millis());
 
     // configure the window/canvas
     let canvas = Canvas::new(WIDTH, HEIGHT).title("Static Raytracer");
