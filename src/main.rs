@@ -1,4 +1,4 @@
-use crate::data::{Vec3, Vec4, Mat4, ScalarMul, Product, Add, MatVecDot, Minus, Normalize, Cross, VecDot};
+use crate::data::{Vec3, Vec4, Mat4, ScalarMul, Product, Add, MatVecDot, Minus, Normalize, Cross, VecDot, Mat3};
 use pixel_canvas::{Canvas, Color, Image, XY};
 use std::ops::{IndexMut, Index};
 use std::time::Instant;
@@ -213,7 +213,7 @@ pub fn shortest_dist_to_surface(objects: &Vec<Object>, eye: &Vec3, direction: &V
     return (objects.len() as i32, MAX_DIST);
 }
 
-pub fn look_at(eye: &Vec3, center: &Vec3, up: &Vec3) -> Mat4
+pub fn look_at(eye: &Vec3, center: &Vec3, up: &Vec3) -> Mat3
 {
     let mut f = center._minus(eye);
     f.normalize_();
@@ -221,10 +221,8 @@ pub fn look_at(eye: &Vec3, center: &Vec3, up: &Vec3) -> Mat4
     s.normalize_();
     let mut u = s.cross(&f);
     u.normalize_();
-    let mut m = Mat4::identity();
-    let s = Vec4::from(&s, 0.);
-    let u = Vec4::from(&u, 0.);
-    let f = Vec4::from(&f, 0.).scalar_mul(-1.);
+    let mut m = Mat3::identity();
+    let f = f.scalar_mul(-1.);
 
     m._set_column(0, &s);
     m._set_column(1, &u);
@@ -309,10 +307,10 @@ pub fn cast_ray(ray: &Ray, pre_obj: i32, lights: &Vec<Light>, materials: &Vec<Ma
     }
 }
 
-pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat4, eye_pos: &Vec3, frag_coord: &[f32; 2]) -> Ray
+pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat3, eye_pos: &Vec3, frag_coord: &[f32; 2]) -> Ray
 {
     let view_init_direction = ray_direction_perspective(fov_radian, &frag_coord);
-    let wc_ray_dir = Vec3::from(&look_at_mat.mat_vec_dot(&Vec4::from(&view_init_direction, 0.0)));
+    let wc_ray_dir = look_at_mat.mat_vec_dot(&view_init_direction);
     let primary_ray = Ray {
         origin: eye_pos.clone(),
         direction: wc_ray_dir.normalize()
@@ -376,7 +374,7 @@ fn main() {
     let center = Vec3::new(0.);
     let up = Vec3::new_xyz(0.0, 1.0, 0.0);
     let look_at_mat = look_at(&eye_pos, &center, &up);
-    let wc_ray_dir = Vec3::from(&look_at_mat.mat_vec_dot(&Vec4::new_xyzw(0., 0., 1., 0.)));
+    let wc_ray_dir = look_at_mat.mat_vec_dot(&Vec3::new_xyz(0., 0., 1.));
 
     let mut image = Image::new(WIDTH, HEIGHT);
     for y in 0..HEIGHT
