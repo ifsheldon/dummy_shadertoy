@@ -230,10 +230,10 @@ impl MatVecDot<Vec4> for Mat4
 {
     fn mat_vec_dot(&self, rhs: &Vec4) -> Vec4 {
         let mut v = Vec4::new_xyzw(
-            self._get_entry(0,0) * rhs.x() + self._get_entry(0,1) * rhs.y() + self._get_entry(0,2) * rhs.z() + self._get_entry(0,3)* rhs.w(),
-            self._get_entry(1,0) * rhs.x() + self._get_entry(1,1) * rhs.y() + self._get_entry(1,2) * rhs.z() + self._get_entry(1,3)* rhs.w(),
-            self._get_entry(2,0) * rhs.x() + self._get_entry(2,1) * rhs.y() + self._get_entry(2,2) * rhs.z() + self._get_entry(2,3)* rhs.w(),
-            self._get_entry(3,0) * rhs.x() + self._get_entry(3,1) * rhs.y() + self._get_entry(3,2) * rhs.z() + self._get_entry(3,3)* rhs.w()
+            self._get_entry(0, 0) * rhs.x() + self._get_entry(0, 1) * rhs.y() + self._get_entry(0, 2) * rhs.z() + self._get_entry(0, 3) * rhs.w(),
+            self._get_entry(1, 0) * rhs.x() + self._get_entry(1, 1) * rhs.y() + self._get_entry(1, 2) * rhs.z() + self._get_entry(1, 3) * rhs.w(),
+            self._get_entry(2, 0) * rhs.x() + self._get_entry(2, 1) * rhs.y() + self._get_entry(2, 2) * rhs.z() + self._get_entry(2, 3) * rhs.w(),
+            self._get_entry(3, 0) * rhs.x() + self._get_entry(3, 1) * rhs.y() + self._get_entry(3, 2) * rhs.z() + self._get_entry(3, 3) * rhs.w()
         );
         return v;
     }
@@ -500,16 +500,11 @@ impl Mat3 {
 impl MatVecDot<Vec3> for Mat3
 {
     fn mat_vec_dot(&self, rhs: &Vec3) -> Vec3 {
-        let mut v = Vec3::_new();
-        for row in 0..3
-        {
-            let mut accum = 0.;
-            for col in 0..3
-            {
-                accum += self._get_entry(row, col) * rhs._get(col);
-            }
-            v._set(row, accum);
-        }
+        let mut v = Vec3::new_xyz(
+            self._get_entry(0, 0) * rhs.x() + self._get_entry(0, 1) * rhs.y() + self._get_entry(0, 2) * rhs.z(),
+            self._get_entry(1, 0) * rhs.x() + self._get_entry(1, 1) * rhs.y() + self._get_entry(1, 2) * rhs.z(),
+            self._get_entry(2, 0) * rhs.x() + self._get_entry(2, 1) * rhs.y() + self._get_entry(2, 2) * rhs.z(),
+        );
         return v;
     }
 }
