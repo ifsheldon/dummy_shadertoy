@@ -447,8 +447,8 @@ impl Mat3 {
     pub(crate) fn _get_column(&self, column: usize) -> Vec3
     {
         let v = Vec3::new_xyz(self._get_entry(0, column),
-                                  self._get_entry(1, column),
-                                  self._get_entry(2, column));
+                              self._get_entry(1, column),
+                              self._get_entry(2, column));
         return v;
     }
 
@@ -632,7 +632,7 @@ impl Inverse for Mat3 {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Vec3
 {
     transposed: bool,
