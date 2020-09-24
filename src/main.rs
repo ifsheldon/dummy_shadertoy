@@ -2,7 +2,11 @@ use crate::data::{Vec3, Vec4, Mat4, ScalarMul, Product, Add, MatVecDot, Minus, N
 use pixel_canvas::{Canvas, Color, Image, XY};
 use std::ops::{IndexMut, Index};
 use std::time::Instant;
-use crate::shapes::{Shape, Sphere, Cube, Plane, Ellipsoid, RoundedCylinder, Cylinder};
+use crate::shapes::{sdf_sphere, sdf_rounded_cylinder, sdf_plane, sdf_cylinder, sdf_cube, sdf_ellipsoid};
+use std::sync::{Arc, RwLock, mpsc};
+use std::thread;
+use std::borrow::Borrow;
+use std::cmp::Ordering;
 
 mod data;
 mod err;
@@ -29,11 +33,20 @@ pub struct Ray
     pub direction: Vec3
 }
 
+pub enum ShapeTypes
+{
+    Sphere(f32),
+    RoundedCylinder(f32, f32, f32),
+    Plane(f32, f32, f32, f32),
+    Cylinder(f32, f32),
+    Cube(f32, f32, f32),
+    Ellipsoid(f32, f32, f32)
+}
 
 pub struct Object
 {
     transformation: Mat4,
-    shape: Box<dyn Shape>,
+    shape: ShapeTypes,
     material_id: usize
 }
 
@@ -59,7 +72,7 @@ pub struct Light
 pub fn add_cube(objects: &mut Vec<Object>, width: f32, height: f32, depth: f32, material_id: usize, transformation: Mat4)
 {
     let o = Object {
-        shape: Cube::new(width, height, depth),
+        shape: ShapeTypes::Cube(width, height, depth),
         transformation,
         material_id
     };
@@ -69,7 +82,7 @@ pub fn add_cube(objects: &mut Vec<Object>, width: f32, height: f32, depth: f32, 
 pub fn add_plane(objects: &mut Vec<Object>, coefficients: &Vec4, material_id: usize, transformation: Mat4)
 {
     let o = Object {
-        shape: Plane::new(coefficients.x(), coefficients.y(), coefficients.z(), coefficients.w()),
+        shape: ShapeTypes::Plane(coefficients.x(), coefficients.y(), coefficients.z(), coefficients.w()),
         transformation,
         material_id
     };
@@ -80,7 +93,7 @@ pub fn add_sphere(objects: &mut Vec<Object>, radius: f32, material_id: usize, tr
 {
     let o = Object {
         transformation,
-        shape: Sphere::new(radius),
+        shape: ShapeTypes::Sphere(radius),
         material_id
     };
     objects.push(o);
@@ -90,7 +103,7 @@ pub fn add_ellipsoid(objects: &mut Vec<Object>, dimensions: Vec3, material_id: u
 {
     let o = Object {
         transformation,
-        shape: Ellipsoid::new(dimensions),
+        shape: ShapeTypes::Ellipsoid(dimensions.x(), dimensions.y(), dimensions.z()),
         material_id
     };
     objects.push(o);
@@ -100,7 +113,7 @@ pub fn add_rounded_cylinder(objects: &mut Vec<Object>, radius: f32, round_radius
 {
     let o = Object {
         transformation,
-        shape: RoundedCylinder::new(radius, round_radius, height),
+        shape: ShapeTypes::RoundedCylinder(radius, round_radius, height),
         material_id
     };
     objects.push(o);
@@ -111,7 +124,7 @@ pub fn add_cylinder(objects: &mut Vec<Object>, radius: f32, height: f32, materia
     let o = Object
     {
         transformation,
-        shape: Cylinder::new(radius, height),
+        shape: ShapeTypes::Cylinder(radius, height),
         material_id
     };
     objects.push(o);
@@ -243,8 +256,15 @@ pub fn calc_dist(ref_pos: &Vec3, obj: &Object) -> f32
     let ref_p = Vec4::from(ref_pos, 1.);
     let mut ref_p = obj.transformation.mat_vec_dot(&ref_p);
     ref_p.scalar_mul_(1. / ref_p.w());
-    let ref_point = Vec3::from(&ref_p);
-    return obj.shape.get_dist(&ref_point);
+    let ref_point = &Vec3::from(&ref_p);
+    return match obj.shape {
+        ShapeTypes::Sphere(r) => sdf_sphere(ref_point, r),
+        ShapeTypes::RoundedCylinder(r, rr, h) => sdf_rounded_cylinder(ref_point, r, rr, h),
+        ShapeTypes::Plane(a, b, c, w) => sdf_plane(ref_point, &Vec3::new_xyz(a, b, c), w),
+        ShapeTypes::Cylinder(r, h) => sdf_cylinder(ref_point, r, h),
+        ShapeTypes::Cube(w, h, d) => sdf_cube(ref_point, Vec3::new_xyz(w, h, d)),
+        ShapeTypes::Ellipsoid(a, b, c) => sdf_ellipsoid(ref_point, &Vec3::new_xyz(a, b, c))
+    }
 }
 
 pub fn scene_distances(ref_pos: &Vec3, objects: &Vec<Object>) -> Vec<f32>
@@ -399,7 +419,7 @@ pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat3, eye_pos: &Vec3, 
 pub fn get_ray_orthogonal(dw: f32, dh: f32, wc_ray_dir: &Vec3, frag_coord: &[f32; 2]) -> Ray
 {
     Ray {
-        origin: Vec3::new_xyz(- dw * (frag_coord[0] - WIDTH_HF + 0.5), dh * (frag_coord[1] - HEIGHT_HF + 0.5), 0.), // actually need to multiply with look_at
+        origin: Vec3::new_xyz(-dw * (frag_coord[0] - WIDTH_HF + 0.5), dh * (frag_coord[1] - HEIGHT_HF + 0.5), 0.), // actually need to multiply with look_at
         direction: wc_ray_dir.clone()
     }
 }
@@ -438,7 +458,8 @@ pub fn shade(primary_ray: Ray, objects: &Vec<Object>, materials: &Vec<Material>,
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
-    const USE_PERSPECTIVE: bool = false;
+    const USE_PERSPECTIVE: bool = true;
+    const THREAD_NUM: usize = 16;
     let now = Instant::now();
     let mut objects = Vec::new();
     let mut lights = Vec::new();
@@ -454,19 +475,50 @@ fn main() {
 
     let dw = VIEW_PLANE_WIDTH / WIDTH_F;
     let dh = VIEW_PLANE_HEIGHT / HEIGHT_F;
-    let mut image = Image::new(WIDTH, HEIGHT);
-    for y in 0..HEIGHT
-    {
-        for x in 0..WIDTH
-        {
-            let a = image.index_mut(XY(x, y));
-            let frag_coord = [x as f32, y as f32];
-            let primary_ray = if USE_PERSPECTIVE { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
-            *a = to_color(&shade(primary_ray, &objects, &materials, &lights));
-        }
-    }
+    let slice_height = HEIGHT / THREAD_NUM;
 
-    println!("Used {} ms to render the scene using one thread of Intel 7700HQ\n", now.elapsed().as_millis());
+    let objects = Arc::new(RwLock::new(objects));
+    let lights = Arc::new(RwLock::new(lights));
+    let materials = Arc::new(RwLock::new(materials));
+
+    let (tx, rx) = mpsc::channel();
+    for i in 0..THREAD_NUM
+    {
+        let t = mpsc::Sender::clone(&tx);
+        let objects = Arc::clone(&objects);
+        let lights = Arc::clone(&lights);
+        let materials = Arc::clone(&materials);
+        thread::spawn(move || {
+            let mut image = Image::new(WIDTH, slice_height);
+            let objects = objects.read().unwrap();
+            let objects = &(*objects);
+            let materials = materials.read().unwrap();
+            let materials = &(*materials);
+            let lights = lights.read().unwrap();
+            let lights = &(*lights);
+            for y in 0..slice_height
+            {
+                for x in 0..WIDTH
+                {
+                    let a = image.index_mut(XY(x, y));
+                    let frag_coord = [x as f32, (y + i * slice_height) as f32];
+                    let primary_ray = if USE_PERSPECTIVE { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
+                    *a = to_color(&shade(primary_ray, &objects, &materials, &lights));
+                }
+            }
+            t.send((i, image));
+        });
+    }
+    drop(tx);
+    let mut imgs = Vec::new();
+    for img in rx
+    {
+        imgs.push(img);
+    }
+    imgs.sort_by(|a, b| {
+        usize::cmp(&a.0, &b.0)
+    });
+    println!("Used {} ms to render the scene using {} threads of Intel 7700HQ\n", now.elapsed().as_millis(), THREAD_NUM);
 
     // configure the window/canvas
     let canvas = Canvas::new(WIDTH, HEIGHT).title("Static Raytracer");
@@ -475,9 +527,10 @@ fn main() {
         // Modify the `image` based on your state.
         let width = frame_buffer_image.width() as usize;
         // bottom-left(0,0) top-right(w, h)
-        for (_y, row) in frame_buffer_image.chunks_mut(width).enumerate() {
-            for (_x, pixel) in row.iter_mut().enumerate() {
-                *pixel = image.index(XY(_x, _y)).clone();
+        for (y, row) in frame_buffer_image.chunks_mut(width).enumerate() {
+            let image = &mut imgs.get_mut(y / slice_height).unwrap().1;
+            for (x, pixel) in row.iter_mut().enumerate() {
+                *pixel = image.index(XY(x, y % slice_height)).clone();
             }
         }
     });
