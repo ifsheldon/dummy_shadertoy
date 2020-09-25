@@ -3,6 +3,8 @@ use pixel_canvas::{Canvas, Color, Image, XY};
 use std::ops::{IndexMut, Index};
 use std::time::Instant;
 use crate::shapes::{Shape, Sphere, Cube, Plane, Ellipsoid, RoundedCylinder, Cylinder};
+use std::io::stdin;
+use std::process::exit;
 
 mod data;
 mod err;
@@ -441,7 +443,37 @@ pub fn shade(primary_ray: Ray, objects: &Vec<Object>, materials: &Vec<Material>,
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
-    const USE_PERSPECTIVE: bool = false;
+    let use_perspective;
+    loop {
+        println!("Use Perspective? y for perspective view, n for orthogonal view");
+        let mut buf = String::new();
+        let result = stdin().read_line(&mut buf);
+        match result {
+            Ok(_) => if buf.len() == 3 {
+                let s = buf.to_lowercase();
+                if s.contains("y") {
+                    use_perspective = true;
+                    println!("Using Perspective");
+                    break;
+                } else if s.contains("n") {
+                    use_perspective = false;
+                    println!("Using Orthogonal");
+                    break;
+                } else {
+                    eprintln!("Wrong Input, try again");
+                }
+            } else {
+                println!("Entered too many characters, try again");
+            }
+            Err(e) =>
+                {
+                    eprintln!("Unexpected Error, exiting");
+                    eprintln!("{}", e);
+                    exit(-1);
+                }
+        }
+    }
+
     let now = Instant::now();
     let mut objects = Vec::new();
     let mut lights = Vec::new();
@@ -464,7 +496,7 @@ fn main() {
         {
             let a = image.index_mut(XY(x, y));
             let frag_coord = [x as f32, y as f32];
-            let primary_ray = if USE_PERSPECTIVE { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
+            let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
             *a = to_color(&shade(primary_ray, &objects, &materials, &lights));
         }
     }
