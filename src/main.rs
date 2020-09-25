@@ -1,3 +1,9 @@
+// Code Reference:
+// * My fragment shader code that was written in the NUS CS Workshop of Real Time Rendering
+//      hosted on Shadertoy https://www.shadertoy.com/view/wlsSzs
+// * Analytical formulas by Inigo Quilez, source: http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
+// * glm source code on https://github.com/g-truc/glm
+
 use crate::data::{Vec3, Vec4, Mat4, ScalarMul, Product, Add, MatVecDot, Minus, Normalize, Cross, VecDot, Mat3};
 use pixel_canvas::{Canvas, Color, Image, XY};
 use std::ops::{IndexMut, Index};
