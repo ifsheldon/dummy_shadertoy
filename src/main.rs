@@ -208,6 +208,7 @@ pub fn init_scene(objects: &mut Vec<Object>, materials: &mut Vec<Material>, ligh
     add_light(lights, Vec3::new_xyz(0., 5., 0.), Vec3::new(0.3), Vec3::new(0.7));
 }
 
+#[inline]
 pub fn union(distances: Vec<f32>) -> f32
 {
     unsafe {
@@ -247,6 +248,7 @@ pub fn calc_dist(ref_pos: &Vec3, obj: &Object) -> f32
     return obj.shape.get_dist(&ref_point);
 }
 
+#[inline]
 pub fn scene_distances(ref_pos: &Vec3, objects: &Vec<Object>) -> Vec<f32>
 {
     let mut dis = Vec::new();
@@ -257,6 +259,7 @@ pub fn scene_distances(ref_pos: &Vec3, objects: &Vec<Object>) -> Vec<f32>
     return dis;
 }
 
+#[inline]
 pub fn scene_sdf(ref_pos: &Vec3, objects: &Vec<Object>) -> f32
 {
     union(scene_distances(ref_pos, objects))
@@ -399,7 +402,7 @@ pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat3, eye_pos: &Vec3, 
 pub fn get_ray_orthogonal(dw: f32, dh: f32, wc_ray_dir: &Vec3, frag_coord: &[f32; 2]) -> Ray
 {
     Ray {
-        origin: Vec3::new_xyz(- dw * (frag_coord[0] - WIDTH_HF + 0.5), dh * (frag_coord[1] - HEIGHT_HF + 0.5), 0.), // actually need to multiply with look_at
+        origin: Vec3::new_xyz(-dw * (frag_coord[0] - WIDTH_HF + 0.5), dh * (frag_coord[1] - HEIGHT_HF + 0.5), 0.), // actually need to multiply with look_at
         direction: wc_ray_dir.clone()
     }
 }
