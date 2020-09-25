@@ -218,6 +218,7 @@ pub fn init_scene(objects: &mut Vec<Object>, materials: &mut Vec<Material>, ligh
     add_light(lights, Vec3::new_xyz(0., 5., 0.), Vec3::new(0.3), Vec3::new(0.7));
 }
 
+#[inline]
 pub fn union(distances: Vec<f32>) -> f32
 {
     unsafe {
@@ -264,6 +265,7 @@ pub fn calc_dist(ref_pos: &Vec3, obj: &Object) -> f32
     }
 }
 
+#[inline]
 pub fn scene_distances(ref_pos: &Vec3, objects: &Vec<Object>) -> Vec<f32>
 {
     let mut dis = Vec::new();
@@ -274,6 +276,7 @@ pub fn scene_distances(ref_pos: &Vec3, objects: &Vec<Object>) -> Vec<f32>
     return dis;
 }
 
+#[inline]
 pub fn scene_sdf(ref_pos: &Vec3, objects: &Vec<Object>) -> f32
 {
     union(scene_distances(ref_pos, objects))
