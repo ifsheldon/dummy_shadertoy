@@ -337,9 +337,9 @@ pub fn ray_direction_perspective(_fov_radian: f32, frag_coord: &[f32; 2]) -> Vec
 pub fn estimate_normal(p: &Vec3, objects: &Vec<Object>) -> Vec3
 {
     let mut v = Vec3::new_xyz(
-        scene_sdf(&Vec3::new_xyz(p.x() + EPSILON, p.y(), p.z()), objects),
-        scene_sdf(&Vec3::new_xyz(p.x(), p.y() + EPSILON, p.z()), objects),
-        scene_sdf(&Vec3::new_xyz(p.x(), p.y(), p.z() + EPSILON), objects)
+        scene_sdf(&Vec3::new_xyz(p.x() + EPSILON, p.y(), p.z()), objects) - scene_sdf(&Vec3::new_xyz(p.x() - EPSILON, p.y(), p.z()), objects),
+        scene_sdf(&Vec3::new_xyz(p.x(), p.y() + EPSILON, p.z()), objects) - scene_sdf(&Vec3::new_xyz(p.x(), p.y() - EPSILON, p.z()), objects),
+        scene_sdf(&Vec3::new_xyz(p.x(), p.y(), p.z() + EPSILON), objects) - scene_sdf(&Vec3::new_xyz(p.x(), p.y(), p.z() - EPSILON), objects)
     );
     v.normalize_();
     return v;
