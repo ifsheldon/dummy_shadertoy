@@ -355,7 +355,7 @@ pub fn estimate_normal_simplified(p: &Vec3, obj: &Object) -> Vec3
             v.normalize_();
             v
         }
-        ShapeTypes::Cylinder(r, h) => {
+        ShapeTypes::Cylinder(_r, h) => {
             if p.z() >= h - EPSILON
             {
                 Vec3::new_xyz(0., 0., 1.)
