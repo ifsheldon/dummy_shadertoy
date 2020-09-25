@@ -333,6 +333,61 @@ pub fn ray_direction_perspective(_fov_radian: f32, frag_coord: &[f32; 2]) -> Vec
     return v;
 }
 
+
+pub fn estimate_normal_simplified(p: &Vec3, obj: &Object) -> Vec3
+{
+    return match obj.shape {
+        ShapeTypes::Sphere(_) => {
+            let mut v = p.clone();
+            v.normalize_();
+            v
+        }
+        ShapeTypes::RoundedCylinder(_, _, _) => {
+            unimplemented!()
+        }
+        ShapeTypes::Plane(x, y, z, _) => {
+            let mut v = Vec3::new_xyz(x, y, z);
+            v.normalize_();
+            v
+        }
+        ShapeTypes::Cylinder(r, h) => {
+            if p.z() >= h - EPSILON
+            {
+                Vec3::new_xyz(0., 0., 1.)
+            } else if p.z() <= EPSILON - h {
+                Vec3::new_xyz(0.0, 0.0, -1.0)
+            } else {
+                let mut v = Vec3::new_xyz(p.x(), p.y(), 0.0);
+                v.normalize_();
+                v
+            }
+        }
+        ShapeTypes::Cube(w, h, d) => {
+            if p.x() >= w - EPSILON
+            {
+                Vec3::new_xyz(1., 0., 0.)
+            } else if p.x() <= EPSILON
+            {
+                Vec3::new_xyz(-1., 0., 0.)
+            } else if p.y() >= h - EPSILON {
+                Vec3::new_xyz(0., 1., 0.)
+            } else if p.y() <= EPSILON {
+                Vec3::new_xyz(0., -1.0, 0.)
+            } else if p.z() >= d - EPSILON {
+                Vec3::new_xyz(0., 0., 1.)
+            } else {
+                Vec3::new_xyz(0.0, 0.0, -1.0)
+            }
+        }
+        ShapeTypes::Ellipsoid(d1, d2, d3) => {
+            let mut v = Vec3::new_xyz(p.x() / d1, p.y() / d2, p.z() / d3);
+            v.normalize_();
+            v
+        }
+    }
+}
+
+
 #[inline]
 pub fn estimate_normal(p: &Vec3, objects: &Vec<Object>) -> Vec3
 {
