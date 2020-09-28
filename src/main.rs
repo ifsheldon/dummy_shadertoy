@@ -521,7 +521,7 @@ pub fn shade(primary_ray: Ray, objects: &Vec<Object>, materials: &Vec<Material>,
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
-    const THREAD_NUM: usize = 16;
+    const THREAD_NUM: usize = 32;
     let use_perspective;
     loop {
         println!("Use Perspective? y for perspective view, n for orthogonal view");
