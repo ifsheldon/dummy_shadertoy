@@ -275,11 +275,9 @@ pub fn calc_dist(ref_pos: &Vec3, obj: &Object) -> f32
 #[inline]
 pub fn scene_distances(ref_pos: &Vec3, objects: &Vec<Object>) -> Vec<f32>
 {
-    let mut dis = Vec::new();
-    for o in objects.iter()
-    {
-        dis.push(calc_dist(ref_pos, o));
-    }
+    let dis = objects.iter().map(|o| {
+        calc_dist(ref_pos, o)
+    }).collect();
     return dis;
 }
 
@@ -343,68 +341,31 @@ pub fn ray_direction_perspective(_fov_radian: f32, frag_coord: &[f32; 2]) -> Vec
     return v;
 }
 
-
-pub fn estimate_normal_simplified(p: &Vec3, obj: &Object) -> Vec3
-{
-    return match obj.shape {
-        ShapeTypes::Sphere(_) => {
-            let mut v = p.clone();
-            v.normalize_();
-            v
-        }
-        ShapeTypes::RoundedCylinder(_, _, _) => {
-            unimplemented!()
-        }
-        ShapeTypes::Plane(x, y, z, _) => {
-            let mut v = Vec3::new_xyz(x, y, z);
-            v.normalize_();
-            v
-        }
-        ShapeTypes::Cylinder(_r, h) => {
-            if p.z() >= h - EPSILON
-            {
-                Vec3::new_xyz(0., 0., 1.)
-            } else if p.z() <= EPSILON - h {
-                Vec3::new_xyz(0.0, 0.0, -1.0)
-            } else {
-                let mut v = Vec3::new_xyz(p.x(), p.y(), 0.0);
-                v.normalize_();
-                v
-            }
-        }
-        ShapeTypes::Cube(w, h, d) => {
-            if p.x() >= w - EPSILON
-            {
-                Vec3::new_xyz(1., 0., 0.)
-            } else if p.x() <= EPSILON
-            {
-                Vec3::new_xyz(-1., 0., 0.)
-            } else if p.y() >= h - EPSILON {
-                Vec3::new_xyz(0., 1., 0.)
-            } else if p.y() <= EPSILON {
-                Vec3::new_xyz(0., -1.0, 0.)
-            } else if p.z() >= d - EPSILON {
-                Vec3::new_xyz(0., 0., 1.)
-            } else {
-                Vec3::new_xyz(0.0, 0.0, -1.0)
-            }
-        }
-        ShapeTypes::Ellipsoid(d1, d2, d3) => {
-            let mut v = Vec3::new_xyz(p.x() / d1, p.y() / d2, p.z() / d3);
-            v.normalize_();
-            v
-        }
-    }
-}
-
-
 #[inline]
 pub fn estimate_normal(p: &Vec3, objects: &Vec<Object>) -> Vec3
 {
-    let mut v = Vec3::new_xyz(
-        scene_sdf(&Vec3::new_xyz(p.x() + EPSILON, p.y(), p.z()), objects) - scene_sdf(&Vec3::new_xyz(p.x() - EPSILON, p.y(), p.z()), objects),
-        scene_sdf(&Vec3::new_xyz(p.x(), p.y() + EPSILON, p.z()), objects) - scene_sdf(&Vec3::new_xyz(p.x(), p.y() - EPSILON, p.z()), objects),
-        scene_sdf(&Vec3::new_xyz(p.x(), p.y(), p.z() + EPSILON), objects) - scene_sdf(&Vec3::new_xyz(p.x(), p.y(), p.z() - EPSILON), objects)
+    let mut poses = Vec::new();
+    poses.push((0, Vec3::new_xyz(p.x() + EPSILON, p.y(), p.z())));
+    poses.push((1, Vec3::new_xyz(p.x() - EPSILON, p.y(), p.z())));
+
+    poses.push((2, Vec3::new_xyz(p.x(), p.y() + EPSILON, p.z())));
+    poses.push((3, Vec3::new_xyz(p.x(), p.y() - EPSILON, p.z())));
+
+    poses.push((4, Vec3::new_xyz(p.x(), p.y(), p.z() + EPSILON)));
+    poses.push((5, Vec3::new_xyz(p.x(), p.y(), p.z() - EPSILON)));
+
+    let mut sdfs: Vec<(i32, f32)> = poses.iter().map(|(idx, pos)| {
+        (idx.clone(), scene_sdf(pos, objects))
+    }).collect(); // seems to take more time when using par_iter, but worth trying when porting to higher performance computer
+
+    sdfs.sort_by(|x, y|
+        {
+            i32::cmp(&x.0, &y.0)
+        });
+
+    let mut v = Vec3::new_xyz(sdfs.get(0).unwrap().1 - sdfs.get(1).unwrap().1,
+                              sdfs.get(2).unwrap().1 - sdfs.get(3).unwrap().1,
+                              sdfs.get(4).unwrap().1 - sdfs.get(5).unwrap().1,
     );
     v.normalize_();
     return v;
