@@ -536,7 +536,7 @@ fn main() {
                         {
                             let frag_coord = [x as f32, y as f32];
                             let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
-                            *pixel = to_color(&shade(primary_ray, &objects, &materials, &lights));
+                            *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
                         }
                 )
             }
@@ -569,20 +569,22 @@ fn main() {
 }
 
 #[inline]
-fn to_color(color: &Vec3) -> Color
+fn to_color(mut color: Vec3) -> Color
 {
-    let std = clamp(color);
-    let std = std.scalar_mul(255.);
-    let x = std.r().round();
-    let y = std.g().round();
-    let z = std.b().round();
+    clamp_(&mut color);
+    color.scalar_mul_(255.);
+    let x = color.r().round();
+    let y = color.g().round();
+    let z = color.b().round();
     Color::rgb(x as u8, y as u8, z as u8)
 }
 
 #[inline]
-fn clamp(color: &Vec3) -> Vec3
+fn clamp_(color:&mut Vec3)
 {
-    Vec3::new_rgb(clamp_float(color.r()), clamp_float(color.g()), clamp_float(color.b()))
+    color.set_r(clamp_float(color.r()));
+    color.set_g(clamp_float(color.g()));
+    color.set_b(clamp_float(color.b()));
 }
 
 #[inline]
