@@ -6,13 +6,12 @@
 
 use crate::data::{Vec3, Vec4, Mat4, ScalarMul, Product, Add, MatVecDot, Minus, Normalize, Cross, VecDot, Mat3};
 use pixel_canvas::{Canvas, Color, Image, XY};
-use std::ops::{IndexMut, Index};
+use std::ops::Index;
 use std::time::Instant;
 use crate::shapes::{sdf_sphere, sdf_rounded_cylinder, sdf_plane, sdf_cylinder, sdf_cube, sdf_ellipsoid};
-use std::sync::{Arc, RwLock, mpsc};
-use std::thread;
 use std::io::stdin;
 use std::process::exit;
+use rayon::prelude::*;
 
 mod data;
 mod err;
@@ -276,11 +275,9 @@ pub fn calc_dist(ref_pos: &Vec3, obj: &Object) -> f32
 #[inline]
 pub fn scene_distances(ref_pos: &Vec3, objects: &Vec<Object>) -> Vec<f32>
 {
-    let mut dis = Vec::new();
-    for o in objects.iter()
-    {
-        dis.push(calc_dist(ref_pos, o));
-    }
+    let dis = objects.iter().map(|o| {
+        calc_dist(ref_pos, o)
+    }).collect();
     return dis;
 }
 
@@ -344,68 +341,31 @@ pub fn ray_direction_perspective(_fov_radian: f32, frag_coord: &[f32; 2]) -> Vec
     return v;
 }
 
-
-pub fn estimate_normal_simplified(p: &Vec3, obj: &Object) -> Vec3
-{
-    return match obj.shape {
-        ShapeTypes::Sphere(_) => {
-            let mut v = p.clone();
-            v.normalize_();
-            v
-        }
-        ShapeTypes::RoundedCylinder(_, _, _) => {
-            unimplemented!()
-        }
-        ShapeTypes::Plane(x, y, z, _) => {
-            let mut v = Vec3::new_xyz(x, y, z);
-            v.normalize_();
-            v
-        }
-        ShapeTypes::Cylinder(_r, h) => {
-            if p.z() >= h - EPSILON
-            {
-                Vec3::new_xyz(0., 0., 1.)
-            } else if p.z() <= EPSILON - h {
-                Vec3::new_xyz(0.0, 0.0, -1.0)
-            } else {
-                let mut v = Vec3::new_xyz(p.x(), p.y(), 0.0);
-                v.normalize_();
-                v
-            }
-        }
-        ShapeTypes::Cube(w, h, d) => {
-            if p.x() >= w - EPSILON
-            {
-                Vec3::new_xyz(1., 0., 0.)
-            } else if p.x() <= EPSILON
-            {
-                Vec3::new_xyz(-1., 0., 0.)
-            } else if p.y() >= h - EPSILON {
-                Vec3::new_xyz(0., 1., 0.)
-            } else if p.y() <= EPSILON {
-                Vec3::new_xyz(0., -1.0, 0.)
-            } else if p.z() >= d - EPSILON {
-                Vec3::new_xyz(0., 0., 1.)
-            } else {
-                Vec3::new_xyz(0.0, 0.0, -1.0)
-            }
-        }
-        ShapeTypes::Ellipsoid(d1, d2, d3) => {
-            let mut v = Vec3::new_xyz(p.x() / d1, p.y() / d2, p.z() / d3);
-            v.normalize_();
-            v
-        }
-    }
-}
-
-
 #[inline]
 pub fn estimate_normal(p: &Vec3, objects: &Vec<Object>) -> Vec3
 {
-    let mut v = Vec3::new_xyz(
-        scene_sdf(&Vec3::new_xyz(p.x() + EPSILON, p.y(), p.z()), objects) - scene_sdf(&Vec3::new_xyz(p.x() - EPSILON, p.y(), p.z()), objects),
-        scene_sdf(&Vec3::new_xyz(p.x(), p.y() + EPSILON, p.z()), objects) - scene_sdf(&Vec3::new_xyz(p.x(), p.y() - EPSILON, p.z()), objects),
-        scene_sdf(&Vec3::new_xyz(p.x(), p.y(), p.z() + EPSILON), objects) - scene_sdf(&Vec3::new_xyz(p.x(), p.y(), p.z() - EPSILON), objects)
+    let mut poses = Vec::new();
+    poses.push((0, Vec3::new_xyz(p.x() + EPSILON, p.y(), p.z())));
+    poses.push((1, Vec3::new_xyz(p.x() - EPSILON, p.y(), p.z())));
+
+    poses.push((2, Vec3::new_xyz(p.x(), p.y() + EPSILON, p.z())));
+    poses.push((3, Vec3::new_xyz(p.x(), p.y() - EPSILON, p.z())));
+
+    poses.push((4, Vec3::new_xyz(p.x(), p.y(), p.z() + EPSILON)));
+    poses.push((5, Vec3::new_xyz(p.x(), p.y(), p.z() - EPSILON)));
+
+    let mut sdfs: Vec<(i32, f32)> = poses.iter().map(|(idx, pos)| {
+        (idx.clone(), scene_sdf(pos, objects))
+    }).collect(); // seems to take more time when using par_iter, but worth trying when porting to higher performance computer
+
+    sdfs.sort_by(|x, y|
+        {
+            i32::cmp(&x.0, &y.0)
+        });
+
+    let mut v = Vec3::new_xyz(sdfs.get(0).unwrap().1 - sdfs.get(1).unwrap().1,
+                              sdfs.get(2).unwrap().1 - sdfs.get(3).unwrap().1,
+                              sdfs.get(4).unwrap().1 - sdfs.get(5).unwrap().1,
     );
     v.normalize_();
     return v;
@@ -521,7 +481,6 @@ pub fn shade(primary_ray: Ray, objects: &Vec<Object>, materials: &Vec<Material>,
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
-    const THREAD_NUM: usize = 32;
     let use_perspective;
     loop {
         println!("Use Perspective? y for perspective view, n for orthogonal view");
@@ -566,53 +525,34 @@ fn main() {
     let look_at_mat = look_at(&eye_pos, &center, &up);
     let wc_ray_dir = look_at_mat.mat_vec_dot(&Vec3::new_xyz(0., 0., 1.));
 
+    let mut image = Image::new(WIDTH, HEIGHT);
     let dw = VIEW_PLANE_WIDTH / WIDTH_F;
     let dh = VIEW_PLANE_HEIGHT / HEIGHT_F;
-    let slice_height = HEIGHT / THREAD_NUM;
-
-    let objects = Arc::new(RwLock::new(objects));
-    let lights = Arc::new(RwLock::new(lights));
-    let materials = Arc::new(RwLock::new(materials));
-
-    let (tx, rx) = mpsc::channel();
-    for i in 0..THREAD_NUM
-    {
-        let t = mpsc::Sender::clone(&tx);
-        let objects = Arc::clone(&objects);
-        let lights = Arc::clone(&lights);
-        let materials = Arc::clone(&materials);
-        thread::spawn(move || {
-            let mut image = Image::new(WIDTH, slice_height);
-            let objects = objects.read().unwrap();
-            let objects = &(*objects);
-            let materials = materials.read().unwrap();
-            let materials = &(*materials);
-            let lights = lights.read().unwrap();
-            let lights = &(*lights);
-            for y in 0..slice_height
+    image.par_chunks_mut(WIDTH).enumerate().for_each(
+        |(y, row)|
             {
-                for x in 0..WIDTH
-                {
-                    let a = image.index_mut(XY(x, y));
-                    let frag_coord = [x as f32, (y + i * slice_height) as f32];
-                    let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
-                    *a = to_color(&shade(primary_ray, &objects, &materials, &lights));
-                }
+                row.par_iter_mut().enumerate().for_each(
+                    |(x, pixel)|
+                        {
+                            let frag_coord = [x as f32, y as f32];
+                            let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
+                            *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
+                        }
+                )
             }
-            t.send((i, image));
-        });
-    }
-    drop(tx);
-    let mut imgs = Vec::new();
-    for img in rx
-    {
-        imgs.push(img);
-    }
-    imgs.sort_by(|a, b| {
-        usize::cmp(&a.0, &b.0)
-    });
-    println!("Used {} ms to render the scene using {} threads of Intel 7700HQ\n", now.elapsed().as_millis(), THREAD_NUM);
-
+    );
+    // the below seems to be slower than the above, maybe the granularity is too fine.
+    // image.par_iter_mut().enumerate().for_each(
+    //     |(idx,pixel)|
+    //         {
+    //             let y = idx / WIDTH;
+    //             let x = idx % WIDTH;
+    //             let frag_coord = [x as f32, y as f32];
+    //             let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
+    //             *pixel = to_color(&shade(primary_ray, &objects, &materials, &lights));
+    //         }
+    // );
+    println!("Used {} ms to render the scene using Rayon\n", now.elapsed().as_millis());
     // configure the window/canvas
     let canvas = Canvas::new(WIDTH, HEIGHT).title("Static Raytracer");
     // render up to 60fps
@@ -621,29 +561,30 @@ fn main() {
         let width = frame_buffer_image.width() as usize;
         // bottom-left(0,0) top-right(w, h)
         for (y, row) in frame_buffer_image.chunks_mut(width).enumerate() {
-            let image = &mut imgs.get_mut(y / slice_height).unwrap().1;
             for (x, pixel) in row.iter_mut().enumerate() {
-                *pixel = image.index(XY(x, y % slice_height)).clone();
+                *pixel = image.index(XY(x, y)).clone();
             }
         }
     });
 }
 
 #[inline]
-fn to_color(color: &Vec3) -> Color
+fn to_color(mut color: Vec3) -> Color
 {
-    let std = clamp(color);
-    let std = std.scalar_mul(255.);
-    let x = std.r().round();
-    let y = std.g().round();
-    let z = std.b().round();
+    clamp_(&mut color);
+    color.scalar_mul_(255.);
+    let x = color.r().round();
+    let y = color.g().round();
+    let z = color.b().round();
     Color::rgb(x as u8, y as u8, z as u8)
 }
 
 #[inline]
-fn clamp(color: &Vec3) -> Vec3
+fn clamp_(color:&mut Vec3)
 {
-    Vec3::new_rgb(clamp_float(color.r()), clamp_float(color.g()), clamp_float(color.b()))
+    color.set_r(clamp_float(color.r()));
+    color.set_g(clamp_float(color.g()));
+    color.set_b(clamp_float(color.b()));
 }
 
 #[inline]
