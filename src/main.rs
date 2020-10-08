@@ -541,6 +541,17 @@ fn main() {
                 )
             }
     );
+    // the below seems to be slower than the above, maybe the granularity is too fine.
+    // image.par_iter_mut().enumerate().for_each(
+    //     |(idx,pixel)|
+    //         {
+    //             let y = idx / WIDTH;
+    //             let x = idx % WIDTH;
+    //             let frag_coord = [x as f32, y as f32];
+    //             let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
+    //             *pixel = to_color(&shade(primary_ray, &objects, &materials, &lights));
+    //         }
+    // );
     println!("Used {} ms to render the scene using Rayon\n", now.elapsed().as_millis());
     // configure the window/canvas
     let canvas = Canvas::new(WIDTH, HEIGHT).title("Static Raytracer");
