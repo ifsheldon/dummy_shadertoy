@@ -330,21 +330,10 @@ impl Inverse for Mat4
 impl Transpose for Mat4
 {
     fn transpose(&self) -> Self {
-        let mut t_data: [[f32; 4]; 4] = [[0.; 4]; 4];
-        if !self.transposed
-        {
-            for i in 0..4 {
-                for j in 0..4 {
-                    t_data[i][j] = self.data[j][i];
-                }
-            }
-        } else {
-            t_data = self.data;
-        }
         return Mat4
         {
-            transposed: false,
-            data: t_data
+            transposed: !self.transposed,
+            data: self.data.clone()
         }
     }
 
@@ -542,27 +531,15 @@ impl ScalarMul for Mat3
         self.data[2][0] *= s;
         self.data[2][1] *= s;
         self.data[2][2] *= s;
-
     }
 }
 
 impl Transpose for Mat3
 {
     fn transpose(&self) -> Self {
-        let mut t_data: [[f32; 3]; 3] = [[0.0; 3]; 3];
-        if !self.transposed
-        {
-            for i in 0..3 {
-                for j in 0..3 {
-                    t_data[j][i] = self.data[i][j];
-                }
-            }
-        } else {
-            t_data = self.data;
-        }
         return Mat3 {
-            transposed: false,
-            data: t_data
+            transposed: !self.transposed,
+            data: self.data.clone()
         }
     }
 
