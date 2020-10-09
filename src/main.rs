@@ -15,6 +15,7 @@ use rayon::prelude::*;
 use std::io::stdin;
 use std::process::exit;
 use std::time::Instant;
+use crate::state::KeyboardMouseStates;
 
 mod data;
 mod err;
@@ -622,6 +623,40 @@ fn main() {
         println!("Took {} ms to render one frame", after - before);
     });
 }
+
+// fn main()
+// {
+//     let canvas = Canvas::new(512, 512)
+//         .title("Tile")
+//         .state(KeyboardMouseStates::new())
+//         .input(KeyboardMouseStates::handle_input);
+//     // The canvas will render for you at up to 60fps.
+//     canvas.render(|state, image| {
+//         // Modify the `image` based on your state.
+//         let width = image.width() as usize;
+//         for (y, row) in image.chunks_mut(width).enumerate() {
+//             for (x, pixel) in row.iter_mut().enumerate() {
+//                 if state.received_mouse_press
+//                 {
+//                     println!("Mouse Pressed");
+//                 }
+//                 if state.received_keycode
+//                 {
+//                     println!("Key Got")
+//                 }
+//                 state.reset_flags();
+//                 let dx = x as i32 - state.x;
+//                 let dy = y as i32 - state.y;
+//                 let dist = dx * dx + dy * dy;
+//                 *pixel = Color {
+//                     r: if dist < 128 * 128 { dy as u8 } else { 0 },
+//                     g: if dist < 128 * 128 { dx as u8 } else { 0 },
+//                     b: (x * y) as u8,
+//                 }
+//             }
+//         }
+//     });
+// }
 
 #[inline]
 fn to_color(mut color: Vec3) -> Color {
