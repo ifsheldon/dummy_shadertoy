@@ -21,7 +21,7 @@ const EPSILON: f32 = 0.0001;
 const MIN_DIST: f32 = 0.0;
 const MAX_DIST: f32 = 100.0;
 const MAX_MARCHING_STEPS: i32 = 255;
-const NUM_ITERATIONS: i32 = 3;
+const NUM_ITERATIONS: i32 = 5;
 const BACKGROUND_COLOR: (f32, f32, f32) = (0.4, 0.4, 0.4);
 const WIDTH: usize = 640;
 const WIDTH_F: f32 = WIDTH as f32;
@@ -487,7 +487,7 @@ fn main() {
         let mut buf = String::new();
         let result = stdin().read_line(&mut buf);
         match result {
-            Ok(_) => if buf.len() == 3 {
+            Ok(_) => if buf.len() <= 3 {
                 let s = buf.to_lowercase();
                 if s.contains("y") {
                     use_perspective = true;
@@ -528,30 +528,16 @@ fn main() {
     let mut image = Image::new(WIDTH, HEIGHT);
     let dw = VIEW_PLANE_WIDTH / WIDTH_F;
     let dh = VIEW_PLANE_HEIGHT / HEIGHT_F;
-    image.par_chunks_mut(WIDTH).enumerate().for_each(
-        |(y, row)|
-            {
-                row.par_iter_mut().enumerate().for_each(
-                    |(x, pixel)|
-                        {
-                            let frag_coord = [x as f32, y as f32];
-                            let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
-                            *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
-                        }
-                )
-            }
-    );
-    // the below seems to be slower than the above, maybe the granularity is too fine.
-    // image.par_iter_mut().enumerate().for_each(
-    //     |(idx,pixel)|
-    //         {
-    //             let y = idx / WIDTH;
-    //             let x = idx % WIDTH;
-    //             let frag_coord = [x as f32, y as f32];
-    //             let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
-    //             *pixel = to_color(&shade(primary_ray, &objects, &materials, &lights));
-    //         }
-    // );
+     image.par_iter_mut().enumerate().for_each(
+         |(idx,pixel)|
+             {
+                 let y = idx / WIDTH;
+                 let x = idx % WIDTH;
+                 let frag_coord = [x as f32, y as f32];
+                 let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
+                 *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
+             }
+     );
     println!("Used {} ms to render the scene using Rayon\n", now.elapsed().as_millis());
     // configure the window/canvas
     let canvas = Canvas::new(WIDTH, HEIGHT).title("Static Raytracer");
