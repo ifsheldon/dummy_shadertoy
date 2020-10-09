@@ -4,13 +4,17 @@
 // * Analytical formulas by Inigo Quilez, source: http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
 // * glm source code on https://github.com/g-truc/glm
 
-use crate::data::{Vec3, Vec4, Mat4, ScalarMul, Product, Add, MatVecDot, Minus, Normalize, Cross, VecDot, Mat3};
+use crate::data::{
+    Add, Cross, Mat3, Mat4, MatVecDot, Minus, Normalize, Product, ScalarMul, Vec3, Vec4, VecDot,
+};
+use crate::shapes::{
+    sdf_cube, sdf_cylinder, sdf_ellipsoid, sdf_plane, sdf_rounded_cylinder, sdf_sphere,
+};
 use pixel_canvas::{Canvas, Color};
-use std::time::Instant;
-use crate::shapes::{sdf_sphere, sdf_rounded_cylinder, sdf_plane, sdf_cylinder, sdf_cube, sdf_ellipsoid};
+use rayon::prelude::*;
 use std::io::stdin;
 use std::process::exit;
-use rayon::prelude::*;
+use std::time::Instant;
 
 mod data;
 mod err;
@@ -30,14 +34,12 @@ const HEIGHT_F: f32 = HEIGHT as f32;
 const HEIGHT_HF: f32 = HEIGHT_F / 2.;
 
 #[derive(Copy, Clone)]
-pub struct Ray
-{
+pub struct Ray {
     pub origin: Vec3,
     pub direction: Vec3,
 }
 
-pub enum ShapeTypes
-{
+pub enum ShapeTypes {
     Sphere(f32),
     RoundedCylinder(f32, f32, f32),
     Plane(f32, f32, f32, f32),
@@ -46,16 +48,14 @@ pub enum ShapeTypes
     Ellipsoid(f32, f32, f32),
 }
 
-pub struct Object
-{
+pub struct Object {
     transformation: Mat4,
     shape: ShapeTypes,
     material_id: usize,
 }
 
 #[derive(Copy, Clone)]
-pub struct Material
-{
+pub struct Material {
     ambient: Vec3,
     diffuse: Vec3,
     reflection: Vec3,
@@ -64,16 +64,20 @@ pub struct Material
 }
 
 #[derive(Copy, Clone)]
-pub struct Light
-{
+pub struct Light {
     position: Vec3,
     ambient: Vec3,
     diffuse: Vec3,
 }
 
-
-pub fn add_cube(objects: &mut Vec<Object>, width: f32, height: f32, depth: f32, material_id: usize, transformation: Mat4)
-{
+pub fn add_cube(
+    objects: &mut Vec<Object>,
+    width: f32,
+    height: f32,
+    depth: f32,
+    material_id: usize,
+    transformation: Mat4,
+) {
     let o = Object {
         shape: ShapeTypes::Cube(width, height, depth),
         transformation,
@@ -82,18 +86,31 @@ pub fn add_cube(objects: &mut Vec<Object>, width: f32, height: f32, depth: f32, 
     objects.push(o);
 }
 
-pub fn add_plane(objects: &mut Vec<Object>, coefficients: &Vec4, material_id: usize, transformation: Mat4)
-{
+pub fn add_plane(
+    objects: &mut Vec<Object>,
+    coefficients: &Vec4,
+    material_id: usize,
+    transformation: Mat4,
+) {
     let o = Object {
-        shape: ShapeTypes::Plane(coefficients.x(), coefficients.y(), coefficients.z(), coefficients.w()),
+        shape: ShapeTypes::Plane(
+            coefficients.x(),
+            coefficients.y(),
+            coefficients.z(),
+            coefficients.w(),
+        ),
         transformation,
         material_id,
     };
     objects.push(o);
 }
 
-pub fn add_sphere(objects: &mut Vec<Object>, radius: f32, material_id: usize, transformation: Mat4)
-{
+pub fn add_sphere(
+    objects: &mut Vec<Object>,
+    radius: f32,
+    material_id: usize,
+    transformation: Mat4,
+) {
     let o = Object {
         transformation,
         shape: ShapeTypes::Sphere(radius),
@@ -102,8 +119,12 @@ pub fn add_sphere(objects: &mut Vec<Object>, radius: f32, material_id: usize, tr
     objects.push(o);
 }
 
-pub fn add_ellipsoid(objects: &mut Vec<Object>, dimensions: Vec3, material_id: usize, transformation: Mat4)
-{
+pub fn add_ellipsoid(
+    objects: &mut Vec<Object>,
+    dimensions: Vec3,
+    material_id: usize,
+    transformation: Mat4,
+) {
     let o = Object {
         transformation,
         shape: ShapeTypes::Ellipsoid(dimensions.x(), dimensions.y(), dimensions.z()),
@@ -112,8 +133,14 @@ pub fn add_ellipsoid(objects: &mut Vec<Object>, dimensions: Vec3, material_id: u
     objects.push(o);
 }
 
-pub fn add_rounded_cylinder(objects: &mut Vec<Object>, radius: f32, round_radius: f32, height: f32, material_id: usize, transformation: Mat4)
-{
+pub fn add_rounded_cylinder(
+    objects: &mut Vec<Object>,
+    radius: f32,
+    round_radius: f32,
+    height: f32,
+    material_id: usize,
+    transformation: Mat4,
+) {
     let o = Object {
         transformation,
         shape: ShapeTypes::RoundedCylinder(radius, round_radius, height),
@@ -122,10 +149,14 @@ pub fn add_rounded_cylinder(objects: &mut Vec<Object>, radius: f32, round_radius
     objects.push(o);
 }
 
-pub fn add_cylinder(objects: &mut Vec<Object>, radius: f32, height: f32, material_id: usize, transformation: Mat4)
-{
-    let o = Object
-    {
+pub fn add_cylinder(
+    objects: &mut Vec<Object>,
+    radius: f32,
+    height: f32,
+    material_id: usize,
+    transformation: Mat4,
+) {
+    let o = Object {
         transformation,
         shape: ShapeTypes::Cylinder(radius, height),
         material_id,
@@ -133,8 +164,7 @@ pub fn add_cylinder(objects: &mut Vec<Object>, radius: f32, height: f32, materia
     objects.push(o);
 }
 
-pub fn add_light(lights: &mut Vec<Light>, position: Vec3, ambient: Vec3, source: Vec3)
-{
+pub fn add_light(lights: &mut Vec<Light>, position: Vec3, ambient: Vec3, source: Vec3) {
     let l = Light {
         position,
         ambient,
@@ -143,8 +173,7 @@ pub fn add_light(lights: &mut Vec<Light>, position: Vec3, ambient: Vec3, source:
     lights.push(l);
 }
 
-pub fn translate_obj(mat: Mat4, translation: &Vec3) -> Mat4
-{
+pub fn translate_obj(mat: Mat4, translation: &Vec3) -> Mat4 {
     let mut result = mat.clone();
     let translation = translation.scalar_mul(-1.);
     let m0 = mat._get_column(0);
@@ -161,9 +190,11 @@ pub fn translate_obj(mat: Mat4, translation: &Vec3) -> Mat4
     return result;
 }
 
-
-pub fn init_scene(objects: &mut Vec<Object>, materials: &mut Vec<Material>, lights: &mut Vec<Light>)
-{
+pub fn init_scene(
+    objects: &mut Vec<Object>,
+    materials: &mut Vec<Material>,
+    lights: &mut Vec<Light>,
+) {
     let material_gray = Material {
         diffuse: Vec3::new(0.5),
         ambient: Vec3::new(0.1),
@@ -171,24 +202,21 @@ pub fn init_scene(objects: &mut Vec<Object>, materials: &mut Vec<Material>, ligh
         global_reflection: Vec3::new(0.5),
         specular: 64.0,
     };
-    let material_red = Material
-    {
+    let material_red = Material {
         diffuse: Vec3::new_rgb(1., 0., 0.),
         ambient: Vec3::new_rgb(1., 0., 0.),
         reflection: Vec3::new(1.),
         global_reflection: Vec3::new(0.2),
         specular: 10.,
     };
-    let material_green = Material
-    {
+    let material_green = Material {
         diffuse: Vec3::new_rgb(0., 1., 0.),
         ambient: Vec3::new_rgb(0., 1., 0.),
         reflection: Vec3::new(1.),
         global_reflection: Vec3::new(0.2),
         specular: 10.,
     };
-    let material_blue = Material
-    {
+    let material_blue = Material {
         diffuse: Vec3::new_rgb(0., 0., 1.),
         ambient: Vec3::new_rgb(0., 0., 1.),
         reflection: Vec3::new(1.),
@@ -196,11 +224,10 @@ pub fn init_scene(objects: &mut Vec<Object>, materials: &mut Vec<Material>, ligh
         specular: 10.,
     };
 
-
-    materials.push(material_gray);//idx =0
+    materials.push(material_gray); //idx =0
     materials.push(material_red); //idx =1
-    materials.push(material_green);//idx =2
-    materials.push(material_blue);//idx =3
+    materials.push(material_green); //idx =2
+    materials.push(material_blue); //idx =3
 
     let identity = Mat4::identity();
     // red sphere
@@ -221,32 +248,32 @@ pub fn init_scene(objects: &mut Vec<Object>, materials: &mut Vec<Material>, ligh
     add_rounded_cylinder(objects, 0.1, 0.02, 0.3, 3, transformation);
 
     //white light
-    add_light(lights, Vec3::new_xyz(0., 5., 0.), Vec3::new(0.3), Vec3::new(0.7));
+    add_light(
+        lights,
+        Vec3::new_xyz(0., 5., 0.),
+        Vec3::new(0.3),
+        Vec3::new(0.7),
+    );
 }
 
 #[inline]
-pub fn union(distances: Vec<f32>) -> f32
-{
+pub fn union(distances: Vec<f32>) -> f32 {
     unsafe {
         let mut min_dist = *distances.get_unchecked(0);
-        for i in 0..distances.len()
-        {
+        for i in 0..distances.len() {
             min_dist = f32::min(min_dist, *distances.get_unchecked(i));
         }
         return min_dist;
     }
 }
 
-pub fn union_obj(distances: &Vec<f32>) -> (i32, f32)
-{
+pub fn union_obj(distances: &Vec<f32>) -> (i32, f32) {
     unsafe {
         let mut min_dist = *distances.get_unchecked(0);
         let mut idx = 0;
-        for i in 0..distances.len()
-        {
+        for i in 0..distances.len() {
             let c = *distances.get_unchecked(i);
-            if c < min_dist
-            {
+            if c < min_dist {
                 min_dist = c;
                 idx = i;
             }
@@ -255,8 +282,7 @@ pub fn union_obj(distances: &Vec<f32>) -> (i32, f32)
     }
 }
 
-pub fn calc_dist(ref_pos: &Vec3, obj: &Object) -> f32
-{
+pub fn calc_dist(ref_pos: &Vec3, obj: &Object) -> f32 {
     let ref_p = Vec4::from(ref_pos, 1.);
     let mut ref_p = obj.transformation.mat_vec_dot(&ref_p);
     ref_p.scalar_mul_(1. / ref_p.w());
@@ -267,51 +293,46 @@ pub fn calc_dist(ref_pos: &Vec3, obj: &Object) -> f32
         ShapeTypes::Plane(a, b, c, w) => sdf_plane(ref_point, &Vec3::new_xyz(a, b, c), w),
         ShapeTypes::Cylinder(r, h) => sdf_cylinder(ref_point, r, h),
         ShapeTypes::Cube(w, h, d) => sdf_cube(ref_point, Vec3::new_xyz(w, h, d)),
-        ShapeTypes::Ellipsoid(a, b, c) => sdf_ellipsoid(ref_point, &Vec3::new_xyz(a, b, c))
+        ShapeTypes::Ellipsoid(a, b, c) => sdf_ellipsoid(ref_point, &Vec3::new_xyz(a, b, c)),
     };
 }
 
 #[inline]
-pub fn scene_distances(ref_pos: &Vec3, objects: &Vec<Object>) -> Vec<f32>
-{
-    let dis = objects.iter().map(|o| {
-        calc_dist(ref_pos, o)
-    }).collect();
+pub fn scene_distances(ref_pos: &Vec3, objects: &Vec<Object>) -> Vec<f32> {
+    let dis = objects.iter().map(|o| calc_dist(ref_pos, o)).collect();
     return dis;
 }
 
 #[inline]
-pub fn scene_sdf(ref_pos: &Vec3, objects: &Vec<Object>) -> f32
-{
+pub fn scene_sdf(ref_pos: &Vec3, objects: &Vec<Object>) -> f32 {
     union(scene_distances(ref_pos, objects))
 }
 
-pub fn shortest_dist_to_surface(objects: &Vec<Object>, eye: &Vec3, direction: &Vec3, pre_obj: i32) -> (i32, f32)
-{
+pub fn shortest_dist_to_surface(
+    objects: &Vec<Object>,
+    eye: &Vec3,
+    direction: &Vec3,
+    pre_obj: i32,
+) -> (i32, f32) {
     let mut depth = MIN_DIST;
-    for _ in 0..MAX_MARCHING_STEPS
-    {
+    for _ in 0..MAX_MARCHING_STEPS {
         let mut distances = scene_distances(&eye._add(&direction.scalar_mul(depth)), objects);
-        if pre_obj != -1
-        {
+        if pre_obj != -1 {
             *distances.get_mut(pre_obj as usize).unwrap() = 2. * MAX_DIST;
         }
         let (hit_obj_idx, dist) = union_obj(&distances);
-        if dist < EPSILON
-        {
+        if dist < EPSILON {
             return (hit_obj_idx, depth);
         }
         depth += dist;
-        if depth >= MAX_DIST
-        {
+        if depth >= MAX_DIST {
             return (objects.len() as i32, MAX_DIST);
         }
     }
     return (objects.len() as i32, MAX_DIST);
 }
 
-pub fn look_at(eye: &Vec3, center: &Vec3, up: &Vec3) -> Mat3
-{
+pub fn look_at(eye: &Vec3, center: &Vec3, up: &Vec3) -> Mat3 {
     let mut look_at_direction = center._minus(eye);
     look_at_direction.normalize_();
     let mut right = look_at_direction.cross(up);
@@ -329,8 +350,7 @@ pub fn look_at(eye: &Vec3, center: &Vec3, up: &Vec3) -> Mat3
 }
 
 #[inline]
-pub fn ray_direction_perspective(_fov_radian: f32, frag_coord: &[f32; 2]) -> Vec3
-{
+pub fn ray_direction_perspective(_fov_radian: f32, frag_coord: &[f32; 2]) -> Vec3 {
     let x = frag_coord[0] - WIDTH_HF + 0.5;
     let y = frag_coord[1] - HEIGHT_HF + 0.5;
     // let z = HEIGHT_F / (fov_radian / 2.).tan();
@@ -341,8 +361,7 @@ pub fn ray_direction_perspective(_fov_radian: f32, frag_coord: &[f32; 2]) -> Vec
 }
 
 #[inline]
-pub fn estimate_normal(p: &Vec3, objects: &Vec<Object>) -> Vec3
-{
+pub fn estimate_normal(p: &Vec3, objects: &Vec<Object>) -> Vec3 {
     let mut poses = Vec::new();
     poses.push((0, Vec3::new_xyz(p.x() + EPSILON, p.y(), p.z())));
     poses.push((1, Vec3::new_xyz(p.x() - EPSILON, p.y(), p.z())));
@@ -353,38 +372,45 @@ pub fn estimate_normal(p: &Vec3, objects: &Vec<Object>) -> Vec3
     poses.push((4, Vec3::new_xyz(p.x(), p.y(), p.z() + EPSILON)));
     poses.push((5, Vec3::new_xyz(p.x(), p.y(), p.z() - EPSILON)));
 
-    let mut sdfs: Vec<(i32, f32)> = poses.iter().map(|(idx, pos)| {
-        (idx.clone(), scene_sdf(pos, objects))
-    }).collect(); // seems to take more time when using par_iter, but worth trying when porting to higher performance computer
+    let mut sdfs: Vec<(i32, f32)> = poses
+        .iter()
+        .map(|(idx, pos)| (idx.clone(), scene_sdf(pos, objects)))
+        .collect(); // seems to take more time when using par_iter, but worth trying when porting to higher performance computer
 
-    sdfs.sort_by(|x, y|
-        {
-            i32::cmp(&x.0, &y.0)
-        });
+    sdfs.sort_by(|x, y| i32::cmp(&x.0, &y.0));
 
-    let mut v = Vec3::new_xyz(sdfs.get(0).unwrap().1 - sdfs.get(1).unwrap().1,
-                              sdfs.get(2).unwrap().1 - sdfs.get(3).unwrap().1,
-                              sdfs.get(4).unwrap().1 - sdfs.get(5).unwrap().1,
+    let mut v = Vec3::new_xyz(
+        sdfs.get(0).unwrap().1 - sdfs.get(1).unwrap().1,
+        sdfs.get(2).unwrap().1 - sdfs.get(3).unwrap().1,
+        sdfs.get(4).unwrap().1 - sdfs.get(5).unwrap().1,
     );
     v.normalize_();
     return v;
 }
 
-pub fn reflect(incident_vec: &Vec3, normalized_normal: &Vec3) -> Vec3
-{
+pub fn reflect(incident_vec: &Vec3, normalized_normal: &Vec3) -> Vec3 {
     incident_vec._minus(&normalized_normal.scalar_mul(2.0 * normalized_normal.dot(incident_vec)))
 }
 
-pub fn phong_lighting(light_direction: &Vec3, normalized_normal: &Vec3, view_direction: &Vec3, in_shadow: bool, material: &Material, light: &Light) -> Vec3
-{
-    if in_shadow
-    {
+pub fn phong_lighting(
+    light_direction: &Vec3,
+    normalized_normal: &Vec3,
+    view_direction: &Vec3,
+    in_shadow: bool,
+    material: &Material,
+    light: &Light,
+) -> Vec3 {
+    if in_shadow {
         return light.ambient.product(&material.ambient);
     } else {
         let reflected_light = reflect(&light_direction.scalar_mul(-1.), normalized_normal);
         let n_dot_l = f32::max(0.0, normalized_normal.dot(light_direction));
         let r_dot_l = f32::max(0.0, reflected_light.dot(view_direction));
-        let r_dot_v_pow_n = if r_dot_l == 0.0 { 0.0 } else { r_dot_l.powf(material.specular) };
+        let r_dot_v_pow_n = if r_dot_l == 0.0 {
+            0.0
+        } else {
+            r_dot_l.powf(material.specular)
+        };
         let ambient = light.ambient.product(&material.ambient);
         let mut result = material.diffuse.scalar_mul(n_dot_l);
         result.add_(&material.reflection.scalar_mul(r_dot_v_pow_n));
@@ -394,11 +420,20 @@ pub fn phong_lighting(light_direction: &Vec3, normalized_normal: &Vec3, view_dir
     }
 }
 
-pub fn cast_ray(ray: &Ray, pre_obj: i32, lights: &Vec<Light>, materials: &Vec<Material>, objects: &Vec<Object>, has_hit: &mut bool, hit_pos: &mut Vec3, hit_normal: &mut Vec3, k_rg: &mut Vec3, hit_obj: &mut i32) -> Vec3
-{
+pub fn cast_ray(
+    ray: &Ray,
+    pre_obj: i32,
+    lights: &Vec<Light>,
+    materials: &Vec<Material>,
+    objects: &Vec<Object>,
+    has_hit: &mut bool,
+    hit_pos: &mut Vec3,
+    hit_normal: &mut Vec3,
+    k_rg: &mut Vec3,
+    hit_obj: &mut i32,
+) -> Vec3 {
     let (obj_idx, dist) = shortest_dist_to_surface(objects, &ray.origin, &ray.direction, pre_obj);
-    if dist > MAX_DIST - EPSILON
-    {
+    if dist > MAX_DIST - EPSILON {
         *has_hit = false;
         return Vec3::new_rgb(BACKGROUND_COLOR.0, BACKGROUND_COLOR.1, BACKGROUND_COLOR.2);
     } else {
@@ -411,23 +446,34 @@ pub fn cast_ray(ray: &Ray, pre_obj: i32, lights: &Vec<Light>, materials: &Vec<Ma
         let hit_material = materials.get(obj.material_id).unwrap();
         *k_rg = hit_material.global_reflection.clone();
         let mut local_color = Vec3::new(0.);
-        for l in lights
-        {
+        for l in lights {
             let shadow_ray = l.position._minus(hit_pos);
             let s_ray = Ray {
                 origin: hit_pos.clone(),
                 direction: shadow_ray.normalize(),
             };
-            let (_hit_obj_index, d) = shortest_dist_to_surface(objects, &s_ray.origin, &s_ray.direction, obj_idx);
+            let (_hit_obj_index, d) =
+                shortest_dist_to_surface(objects, &s_ray.origin, &s_ray.direction, obj_idx);
             let hit_sth = d < MAX_DIST - EPSILON;
-            local_color.add_(&phong_lighting(&s_ray.direction, hit_normal, &ray.direction.scalar_mul(-1.), hit_sth, &hit_material, l));
+            local_color.add_(&phong_lighting(
+                &s_ray.direction,
+                hit_normal,
+                &ray.direction.scalar_mul(-1.),
+                hit_sth,
+                &hit_material,
+                l,
+            ));
         }
         return local_color;
     }
 }
 
-pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat3, eye_pos: &Vec3, frag_coord: &[f32; 2]) -> Ray
-{
+pub fn get_ray_perspective(
+    fov_radian: f32,
+    look_at_mat: &Mat3,
+    eye_pos: &Vec3,
+    frag_coord: &[f32; 2],
+) -> Ray {
     let view_init_direction = ray_direction_perspective(fov_radian, &frag_coord);
     let wc_ray_dir = look_at_mat.mat_vec_dot(&view_init_direction);
     let primary_ray = Ray {
@@ -438,31 +484,47 @@ pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat3, eye_pos: &Vec3, 
 }
 
 #[inline]
-pub fn get_ray_orthogonal(dw: f32, dh: f32, wc_ray_dir: &Vec3, frag_coord: &[f32; 2]) -> Ray
-{
+pub fn get_ray_orthogonal(dw: f32, dh: f32, wc_ray_dir: &Vec3, frag_coord: &[f32; 2]) -> Ray {
     Ray {
-        origin: Vec3::new_xyz(-dw * (frag_coord[0] - WIDTH_HF + 0.5), dh * (frag_coord[1] - HEIGHT_HF + 0.5), 0.), // actually need to multiply with look_at
+        origin: Vec3::new_xyz(
+            -dw * (frag_coord[0] - WIDTH_HF + 0.5),
+            dh * (frag_coord[1] - HEIGHT_HF + 0.5),
+            0.,
+        ), // actually need to multiply with look_at
         direction: wc_ray_dir.clone(),
     }
 }
 
-pub fn shade(primary_ray: Ray, objects: &Vec<Object>, materials: &Vec<Material>, lights: &Vec<Light>) -> Vec3
-{
+pub fn shade(
+    primary_ray: Ray,
+    objects: &Vec<Object>,
+    materials: &Vec<Material>,
+    lights: &Vec<Light>,
+) -> Vec3 {
     let eps = Vec3::new(EPSILON);
     let mut next_ray = primary_ray.clone();
     let mut color_result = Vec3::new(0.);
     let mut component_k_rg = Vec3::new(1.);
     let mut pre_obj = -1;
-    for _level in 0..NUM_ITERATIONS
-    {
+    for _level in 0..NUM_ITERATIONS {
         let mut has_hit = false;
         let mut hit_pos = Vec3::_new();
         let mut hit_normal = Vec3::_new();
         let mut k_rg = Vec3::new(1.);
-        let color_local = cast_ray(&next_ray, pre_obj, lights, materials, objects, &mut has_hit, &mut hit_pos, &mut hit_normal, &mut k_rg, &mut pre_obj);
+        let color_local = cast_ray(
+            &next_ray,
+            pre_obj,
+            lights,
+            materials,
+            objects,
+            &mut has_hit,
+            &mut hit_pos,
+            &mut hit_normal,
+            &mut k_rg,
+            &mut pre_obj,
+        );
         color_result.add_(&component_k_rg.product(&color_local));
-        if !has_hit
-        {
+        if !has_hit {
             break;
         }
         component_k_rg = component_k_rg.product(&k_rg);
@@ -476,7 +538,6 @@ pub fn shade(primary_ray: Ray, objects: &Vec<Object>, materials: &Vec<Material>,
     return color_result;
 }
 
-
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
@@ -486,28 +547,29 @@ fn main() {
         let mut buf = String::new();
         let result = stdin().read_line(&mut buf);
         match result {
-            Ok(_) => if buf.len() <= 3 {
-                let s = buf.to_lowercase();
-                if s.contains("y") {
-                    use_perspective = true;
-                    println!("Using Perspective");
-                    break;
-                } else if s.contains("n") {
-                    use_perspective = false;
-                    println!("Using Orthogonal");
-                    break;
+            Ok(_) => {
+                if buf.len() <= 3 {
+                    let s = buf.to_lowercase();
+                    if s.contains("y") {
+                        use_perspective = true;
+                        println!("Using Perspective");
+                        break;
+                    } else if s.contains("n") {
+                        use_perspective = false;
+                        println!("Using Orthogonal");
+                        break;
+                    } else {
+                        eprintln!("Wrong Input, try again");
+                    }
                 } else {
-                    eprintln!("Wrong Input, try again");
+                    println!("Entered too many characters, try again");
                 }
-            } else {
-                println!("Entered too many characters, try again");
             }
-            Err(e) =>
-                {
-                    eprintln!("Unexpected Error, exiting");
-                    eprintln!("{}", e);
-                    exit(-1);
-                }
+            Err(e) => {
+                eprintln!("Unexpected Error, exiting");
+                eprintln!("{}", e);
+                exit(-1);
+            }
         }
     }
 
@@ -526,7 +588,7 @@ fn main() {
 
     let now = Instant::now();
     // configure the window/canvas
-    let canvas = Canvas::new(WIDTH, HEIGHT).title("Static Raytracer");
+    let canvas = Canvas::new(WIDTH, HEIGHT).title("Dynamic Raytracer");
     let mut before = now.elapsed().as_millis();
     let mut after = before;
     let mut theta: f32 = 0.;
@@ -538,31 +600,30 @@ fn main() {
         eye_pos.set_z(-theta.cos());
         eye_pos.set_x(theta.sin());
         let look_at_mat = look_at(&eye_pos, &center, &up);
-        frame_buffer_image.par_iter_mut().enumerate().for_each(
-            |(idx, pixel)|
-                {
-                    let y = idx / WIDTH;
-                    let x = idx % WIDTH;
-                    let frag_coord = [x as f32, y as f32];
-                    let primary_ray: Ray;
-                    if use_perspective
-                    {
-                        primary_ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
-                    } else {
-                        let wc_ray_dir = look_at_mat.mat_vec_dot(&Vec3::new_xyz(0., 0., 1.));
-                        primary_ray = get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord);
-                    }
-                    *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
+        frame_buffer_image
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(idx, pixel)| {
+                let y = idx / WIDTH;
+                let x = idx % WIDTH;
+                let frag_coord = [x as f32, y as f32];
+                let primary_ray: Ray;
+                if use_perspective {
+                    primary_ray =
+                        get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                } else {
+                    let wc_ray_dir = look_at_mat.mat_vec_dot(&Vec3::new_xyz(0., 0., 1.));
+                    primary_ray = get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord);
                 }
-        );
+                *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
+            });
         after = now.elapsed().as_millis();
         println!("Took {} ms to render one frame", after - before);
     });
 }
 
 #[inline]
-fn to_color(mut color: Vec3) -> Color
-{
+fn to_color(mut color: Vec3) -> Color {
     clamp_(&mut color);
     color.scalar_mul_(255.);
     let x = color.r().round();
@@ -572,8 +633,7 @@ fn to_color(mut color: Vec3) -> Color
 }
 
 #[inline]
-fn clamp_(color: &mut Vec3)
-{
+fn clamp_(color: &mut Vec3) {
     color.set_r(clamp_float(color.r()));
     color.set_g(clamp_float(color.g()));
     color.set_b(clamp_float(color.b()));
