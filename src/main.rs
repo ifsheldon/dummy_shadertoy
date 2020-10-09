@@ -19,6 +19,7 @@ use std::time::Instant;
 mod data;
 mod err;
 mod shapes;
+mod state;
 
 const EPSILON: f32 = 0.0001;
 const MIN_DIST: f32 = 0.0;
