@@ -5,8 +5,7 @@
 // * glm source code on https://github.com/g-truc/glm
 
 use crate::data::{Vec3, Vec4, Mat4, ScalarMul, Product, Add, MatVecDot, Minus, Normalize, Cross, VecDot, Mat3};
-use pixel_canvas::{Canvas, Color, Image, XY};
-use std::ops::Index;
+use pixel_canvas::{Canvas, Color};
 use std::time::Instant;
 use crate::shapes::{sdf_sphere, sdf_rounded_cylinder, sdf_plane, sdf_cylinder, sdf_cube, sdf_ellipsoid};
 use std::io::stdin;
@@ -34,7 +33,7 @@ const HEIGHT_HF: f32 = HEIGHT_F / 2.;
 pub struct Ray
 {
     pub origin: Vec3,
-    pub direction: Vec3
+    pub direction: Vec3,
 }
 
 pub enum ShapeTypes
@@ -44,14 +43,14 @@ pub enum ShapeTypes
     Plane(f32, f32, f32, f32),
     Cylinder(f32, f32),
     Cube(f32, f32, f32),
-    Ellipsoid(f32, f32, f32)
+    Ellipsoid(f32, f32, f32),
 }
 
 pub struct Object
 {
     transformation: Mat4,
     shape: ShapeTypes,
-    material_id: usize
+    material_id: usize,
 }
 
 #[derive(Copy, Clone)]
@@ -61,7 +60,7 @@ pub struct Material
     diffuse: Vec3,
     reflection: Vec3,
     global_reflection: Vec3,
-    specular: f32
+    specular: f32,
 }
 
 #[derive(Copy, Clone)]
@@ -69,7 +68,7 @@ pub struct Light
 {
     position: Vec3,
     ambient: Vec3,
-    diffuse: Vec3
+    diffuse: Vec3,
 }
 
 
@@ -78,7 +77,7 @@ pub fn add_cube(objects: &mut Vec<Object>, width: f32, height: f32, depth: f32, 
     let o = Object {
         shape: ShapeTypes::Cube(width, height, depth),
         transformation,
-        material_id
+        material_id,
     };
     objects.push(o);
 }
@@ -88,7 +87,7 @@ pub fn add_plane(objects: &mut Vec<Object>, coefficients: &Vec4, material_id: us
     let o = Object {
         shape: ShapeTypes::Plane(coefficients.x(), coefficients.y(), coefficients.z(), coefficients.w()),
         transformation,
-        material_id
+        material_id,
     };
     objects.push(o);
 }
@@ -98,7 +97,7 @@ pub fn add_sphere(objects: &mut Vec<Object>, radius: f32, material_id: usize, tr
     let o = Object {
         transformation,
         shape: ShapeTypes::Sphere(radius),
-        material_id
+        material_id,
     };
     objects.push(o);
 }
@@ -108,7 +107,7 @@ pub fn add_ellipsoid(objects: &mut Vec<Object>, dimensions: Vec3, material_id: u
     let o = Object {
         transformation,
         shape: ShapeTypes::Ellipsoid(dimensions.x(), dimensions.y(), dimensions.z()),
-        material_id
+        material_id,
     };
     objects.push(o);
 }
@@ -118,7 +117,7 @@ pub fn add_rounded_cylinder(objects: &mut Vec<Object>, radius: f32, round_radius
     let o = Object {
         transformation,
         shape: ShapeTypes::RoundedCylinder(radius, round_radius, height),
-        material_id
+        material_id,
     };
     objects.push(o);
 }
@@ -129,7 +128,7 @@ pub fn add_cylinder(objects: &mut Vec<Object>, radius: f32, height: f32, materia
     {
         transformation,
         shape: ShapeTypes::Cylinder(radius, height),
-        material_id
+        material_id,
     };
     objects.push(o);
 }
@@ -139,7 +138,7 @@ pub fn add_light(lights: &mut Vec<Light>, position: Vec3, ambient: Vec3, source:
     let l = Light {
         position,
         ambient,
-        diffuse: source
+        diffuse: source,
     };
     lights.push(l);
 }
@@ -170,7 +169,7 @@ pub fn init_scene(objects: &mut Vec<Object>, materials: &mut Vec<Material>, ligh
         ambient: Vec3::new(0.1),
         reflection: Vec3::new(1.0),
         global_reflection: Vec3::new(0.5),
-        specular: 64.0
+        specular: 64.0,
     };
     let material_red = Material
     {
@@ -178,7 +177,7 @@ pub fn init_scene(objects: &mut Vec<Object>, materials: &mut Vec<Material>, ligh
         ambient: Vec3::new_rgb(1., 0., 0.),
         reflection: Vec3::new(1.),
         global_reflection: Vec3::new(0.2),
-        specular: 10.
+        specular: 10.,
     };
     let material_green = Material
     {
@@ -186,7 +185,7 @@ pub fn init_scene(objects: &mut Vec<Object>, materials: &mut Vec<Material>, ligh
         ambient: Vec3::new_rgb(0., 1., 0.),
         reflection: Vec3::new(1.),
         global_reflection: Vec3::new(0.2),
-        specular: 10.
+        specular: 10.,
     };
     let material_blue = Material
     {
@@ -194,7 +193,7 @@ pub fn init_scene(objects: &mut Vec<Object>, materials: &mut Vec<Material>, ligh
         ambient: Vec3::new_rgb(0., 0., 1.),
         reflection: Vec3::new(1.),
         global_reflection: Vec3::new(0.1),
-        specular: 10.
+        specular: 10.,
     };
 
 
@@ -234,7 +233,7 @@ pub fn union(distances: Vec<f32>) -> f32
         {
             min_dist = f32::min(min_dist, *distances.get_unchecked(i));
         }
-        return min_dist
+        return min_dist;
     }
 }
 
@@ -269,7 +268,7 @@ pub fn calc_dist(ref_pos: &Vec3, obj: &Object) -> f32
         ShapeTypes::Cylinder(r, h) => sdf_cylinder(ref_point, r, h),
         ShapeTypes::Cube(w, h, d) => sdf_cube(ref_point, Vec3::new_xyz(w, h, d)),
         ShapeTypes::Ellipsoid(a, b, c) => sdf_ellipsoid(ref_point, &Vec3::new_xyz(a, b, c))
-    }
+    };
 }
 
 #[inline]
@@ -417,7 +416,7 @@ pub fn cast_ray(ray: &Ray, pre_obj: i32, lights: &Vec<Light>, materials: &Vec<Ma
             let shadow_ray = l.position._minus(hit_pos);
             let s_ray = Ray {
                 origin: hit_pos.clone(),
-                direction: shadow_ray.normalize()
+                direction: shadow_ray.normalize(),
             };
             let (_hit_obj_index, d) = shortest_dist_to_surface(objects, &s_ray.origin, &s_ray.direction, obj_idx);
             let hit_sth = d < MAX_DIST - EPSILON;
@@ -433,7 +432,7 @@ pub fn get_ray_perspective(fov_radian: f32, look_at_mat: &Mat3, eye_pos: &Vec3, 
     let wc_ray_dir = look_at_mat.mat_vec_dot(&view_init_direction);
     let primary_ray = Ray {
         origin: eye_pos.clone(),
-        direction: wc_ray_dir.normalize()
+        direction: wc_ray_dir.normalize(),
     };
     return primary_ray;
 }
@@ -443,7 +442,7 @@ pub fn get_ray_orthogonal(dw: f32, dh: f32, wc_ray_dir: &Vec3, frag_coord: &[f32
 {
     Ray {
         origin: Vec3::new_xyz(-dw * (frag_coord[0] - WIDTH_HF + 0.5), dh * (frag_coord[1] - HEIGHT_HF + 0.5), 0.), // actually need to multiply with look_at
-        direction: wc_ray_dir.clone()
+        direction: wc_ray_dir.clone(),
     }
 }
 
@@ -471,7 +470,7 @@ pub fn shade(primary_ray: Ray, objects: &Vec<Object>, materials: &Vec<Material>,
         next_ray_direction.normalize_();
         next_ray = Ray {
             origin: hit_pos._add(&eps),
-            direction: next_ray_direction
+            direction: next_ray_direction,
         };
     }
     return color_result;
@@ -512,45 +511,52 @@ fn main() {
         }
     }
 
-    let now = Instant::now();
     let mut objects = Vec::new();
     let mut lights = Vec::new();
     let mut materials = Vec::new();
     init_scene(&mut objects, &mut materials, &mut lights);
     let fov_radian = (2.0_f32).atan() * 2.;
 
-    let eye_pos = Vec3::new_xyz(0.0, 0.0, -1.0);
+    let mut eye_pos = Vec3::new_xyz(0.0, 0.0, -1.0);
     let center = Vec3::new(0.);
     let up = Vec3::new_xyz(0.0, 1.0, 0.0);
-    let look_at_mat = look_at(&eye_pos, &center, &up);
-    let wc_ray_dir = look_at_mat.mat_vec_dot(&Vec3::new_xyz(0., 0., 1.));
 
-    let mut image = Image::new(WIDTH, HEIGHT);
     let dw = VIEW_PLANE_WIDTH / WIDTH_F;
     let dh = VIEW_PLANE_HEIGHT / HEIGHT_F;
-     image.par_iter_mut().enumerate().for_each(
-         |(idx,pixel)|
-             {
-                 let y = idx / WIDTH;
-                 let x = idx % WIDTH;
-                 let frag_coord = [x as f32, y as f32];
-                 let primary_ray = if use_perspective { get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord) } else { get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord) };
-                 *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
-             }
-     );
-    println!("Used {} ms to render the scene using Rayon\n", now.elapsed().as_millis());
+
+    let now = Instant::now();
     // configure the window/canvas
     let canvas = Canvas::new(WIDTH, HEIGHT).title("Static Raytracer");
+    let mut before = now.elapsed().as_millis();
+    let mut after = before;
+    let mut theta: f32 = 0.;
     // render up to 60fps
     canvas.render(move |_state, frame_buffer_image| {
-        // Modify the `image` based on your state.
-        let width = frame_buffer_image.width() as usize;
         // bottom-left(0,0) top-right(w, h)
-        for (y, row) in frame_buffer_image.chunks_mut(width).enumerate() {
-            for (x, pixel) in row.iter_mut().enumerate() {
-                *pixel = image.index(XY(x, y)).clone();
-            }
-        }
+        before = now.elapsed().as_millis();
+        theta = (before as f32) / 1000.;
+        eye_pos.set_z(-theta.cos());
+        eye_pos.set_x(theta.sin());
+        let look_at_mat = look_at(&eye_pos, &center, &up);
+        frame_buffer_image.par_iter_mut().enumerate().for_each(
+            |(idx, pixel)|
+                {
+                    let y = idx / WIDTH;
+                    let x = idx % WIDTH;
+                    let frag_coord = [x as f32, y as f32];
+                    let primary_ray: Ray;
+                    if use_perspective
+                    {
+                        primary_ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                    } else {
+                        let wc_ray_dir = look_at_mat.mat_vec_dot(&Vec3::new_xyz(0., 0., 1.));
+                        primary_ray = get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord);
+                    }
+                    *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
+                }
+        );
+        after = now.elapsed().as_millis();
+        println!("Took {} ms to render one frame", after - before);
     });
 }
 
@@ -566,7 +572,7 @@ fn to_color(mut color: Vec3) -> Color
 }
 
 #[inline]
-fn clamp_(color:&mut Vec3)
+fn clamp_(color: &mut Vec3)
 {
     color.set_r(clamp_float(color.r()));
     color.set_g(clamp_float(color.g()));
