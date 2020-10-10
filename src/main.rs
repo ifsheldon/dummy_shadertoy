@@ -10,12 +10,13 @@ use crate::data::{
 use crate::shapes::{
     sdf_cube, sdf_cylinder, sdf_ellipsoid, sdf_plane, sdf_rounded_cylinder, sdf_sphere,
 };
+use crate::state::KeyboardMouseStates;
+use pixel_canvas::input::glutin::event::VirtualKeyCode;
 use pixel_canvas::{Canvas, Color};
 use rayon::prelude::*;
 use std::io::stdin;
 use std::process::exit;
 use std::time::Instant;
-use crate::state::KeyboardMouseStates;
 
 mod data;
 mod err;
@@ -26,7 +27,7 @@ const EPSILON: f32 = 0.0001;
 const MIN_DIST: f32 = 0.0;
 const MAX_DIST: f32 = 100.0;
 const MAX_MARCHING_STEPS: i32 = 255;
-const NUM_ITERATIONS: i32 = 5;
+const NUM_ITERATIONS: i32 = 3;
 const BACKGROUND_COLOR: (f32, f32, f32) = (0.4, 0.4, 0.4);
 const WIDTH: usize = 640;
 const WIDTH_F: f32 = WIDTH as f32;
@@ -473,27 +474,40 @@ pub fn cast_ray(
 pub fn get_ray_perspective(
     fov_radian: f32,
     look_at_mat: &Mat3,
-    eye_pos: &Vec3,
+    eye_pos_wc: &Vec3,
     frag_coord: &[f32; 2],
 ) -> Ray {
     let view_init_direction = ray_direction_perspective(fov_radian, &frag_coord);
     let wc_ray_dir = look_at_mat.mat_vec_dot(&view_init_direction);
     let primary_ray = Ray {
-        origin: eye_pos.clone(),
+        origin: eye_pos_wc.clone(),
         direction: wc_ray_dir.normalize(),
     };
     return primary_ray;
 }
 
 #[inline]
-pub fn get_ray_orthogonal(dw: f32, dh: f32, wc_ray_dir: &Vec3, frag_coord: &[f32; 2]) -> Ray {
+pub fn get_ray_orthogonal(
+    dw: f32,
+    dh: f32,
+    _ray_dir_ec: &Vec3,
+    eye_pos_wc: &Vec3,
+    look_at: &Mat3,
+    frag_coord: &[f32; 2],
+) -> Ray {
+    // let mut ray_dir_wc = look_at.mat_vec_dot(ray_dir_ec);
+    let mut ray_dir_wc = look_at._get_column(2); // A little trick here
+    ray_dir_wc.normalize_();
+    let origin_ec = Vec3::new_xyz(
+        dw * (frag_coord[0] - WIDTH_HF + 0.5),
+        dh * (frag_coord[1] - HEIGHT_HF + 0.5),
+        0.,
+    );
+    let mut origin_wc = look_at.mat_vec_dot(&origin_ec);
+    origin_wc.add_(eye_pos_wc); // no need for multiplication for translations
     Ray {
-        origin: Vec3::new_xyz(
-            -dw * (frag_coord[0] - WIDTH_HF + 0.5),
-            dh * (frag_coord[1] - HEIGHT_HF + 0.5),
-            0.,
-        ), // actually need to multiply with look_at
-        direction: wc_ray_dir.clone(),
+        origin: origin_wc,
+        direction: ray_dir_wc,
     }
 }
 
@@ -543,6 +557,8 @@ pub fn shade(
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
+    const SELECT_CIRCLE_RADIUS_SQUARE: i32 = 5 * 5;
+    let orthogonal_ray_dir_ec: Vec3 = Vec3::new_xyz(0., 0., 1.);
     let use_perspective;
     loop {
         println!("Use Perspective? y for perspective view, n for orthogonal view");
@@ -590,7 +606,10 @@ fn main() {
 
     let now = Instant::now();
     // configure the window/canvas
-    let canvas = Canvas::new(WIDTH, HEIGHT).title("Dynamic Raytracer").state(KeyboardMouseStates::new()).input(KeyboardMouseStates::handle_input);
+    let canvas = Canvas::new(WIDTH, HEIGHT)
+        .title("Dynamic Raytracer")
+        .state(KeyboardMouseStates::new())
+        .input(KeyboardMouseStates::handle_input);
     let mut before = now.elapsed().as_millis();
     let mut after = before;
     let mut theta: f32 = 0.;
@@ -598,20 +617,29 @@ fn main() {
     canvas.render(move |state, frame_buffer_image| {
         // bottom-left(0,0) top-right(w, h)
         let cursor_position = (state.x as i32, state.y as i32);
-        if state.received_mouse_press
-        {
-            println!("Mouse Pressed at ({}, {})", cursor_position.0, cursor_position.1);
+        if state.received_mouse_press {
+            println!(
+                "Mouse Pressed at ({}, {})",
+                cursor_position.0, cursor_position.1
+            );
         }
-        if state.received_keycode
-        {
+        if state.received_keycode {
             println!("Key Pressed: {:?}", state.keycode);
+            match state.keycode {
+                VirtualKeyCode::A => theta += (5.0_f32).to_radians(),
+                VirtualKeyCode::D => theta -= (5.0_f32).to_radians(),
+                VirtualKeyCode::R => theta = 0.,
+                _ => {}
+            }
         }
+        println!("Theta: {}", theta.to_degrees());
         state.reset_flags();
         before = now.elapsed().as_millis();
-        theta = (before as f32) / 1000.;
+        // theta = (before as f32) / 1000.;
         eye_pos.set_z(-theta.cos());
         eye_pos.set_x(theta.sin());
         let look_at_mat = look_at(&eye_pos, &center, &up);
+
         frame_buffer_image
             .par_iter_mut()
             .enumerate()
@@ -621,21 +649,28 @@ fn main() {
                 let dx = x as i32 - cursor_position.0;
                 let dy = y as i32 - cursor_position.1;
                 let dist = dx * dx + dy * dy;
-                let in_circle = dist < 10*10;
-                if in_circle
-                {
-                    *pixel = Color { r: 255, g: 255, b: 255 };
+                let in_circle = dist < SELECT_CIRCLE_RADIUS_SQUARE;
+                if in_circle {
+                    *pixel = Color {
+                        r: 255,
+                        g: 255,
+                        b: 255,
+                    };
                     return;
                 }
                 let frag_coord = [x as f32, y as f32];
-                let primary_ray: Ray;
-                if use_perspective {
-                    primary_ray =
-                        get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                let primary_ray: Ray = if use_perspective {
+                    get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord)
                 } else {
-                    let wc_ray_dir = look_at_mat.mat_vec_dot(&Vec3::new_xyz(0., 0., 1.));
-                    primary_ray = get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord);
-                }
+                    get_ray_orthogonal(
+                        dw,
+                        dh,
+                        &orthogonal_ray_dir_ec,
+                        &eye_pos,
+                        &look_at_mat,
+                        &frag_coord,
+                    )
+                };
                 *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
             });
         after = now.elapsed().as_millis();
