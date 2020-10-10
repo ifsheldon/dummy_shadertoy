@@ -92,7 +92,7 @@ pub trait Inverse<Output = Self> {
 #[derive(Clone, Copy)]
 pub struct Mat4 {
     pub(self) transposed: bool,
-    pub(self) data: [[f32; 4]; 4],
+    pub data: [[f32; 4]; 4],
 }
 
 impl Mat4 {
