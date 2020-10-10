@@ -42,6 +42,7 @@ pub struct Ray {
     pub direction: Vec3,
 }
 
+#[derive(Debug)]
 pub enum ShapeTypes {
     Sphere(f32),
     RoundedCylinder(f32, f32, f32),
@@ -423,6 +424,15 @@ pub fn phong_lighting(
     }
 }
 
+pub fn cast_hit_ray(ray: &Ray, objects: &Vec<Object>) -> Option<i32> {
+    let (obj_idx, dist) = shortest_dist_to_surface(objects, &ray.origin, &ray.direction, -1);
+    return if dist > MAX_DIST - EPSILON {
+        None
+    } else {
+        Some(obj_idx)
+    };
+}
+
 pub fn cast_ray(
     ray: &Ray,
     pre_obj: i32,
@@ -616,13 +626,6 @@ fn main() {
     // render up to 60fps
     canvas.render(move |state, frame_buffer_image| {
         // bottom-left(0,0) top-right(w, h)
-        let cursor_position = (state.x as i32, state.y as i32);
-        if state.received_mouse_press {
-            println!(
-                "Mouse Pressed at ({}, {})",
-                cursor_position.0, cursor_position.1
-            );
-        }
         if state.received_keycode {
             println!("Key Pressed: {:?}", state.keycode);
             match state.keycode {
@@ -632,13 +635,40 @@ fn main() {
                 _ => {}
             }
         }
-        println!("Theta: {}", theta.to_degrees());
-        state.reset_flags();
+        // println!("Theta: {}", theta.to_degrees());
         before = now.elapsed().as_millis();
         // theta = (before as f32) / 1000.;
         eye_pos.set_z(-theta.cos());
         eye_pos.set_x(theta.sin());
         let look_at_mat = look_at(&eye_pos, &center, &up);
+        let cursor_position = (state.x as i32, state.y as i32);
+        if state.received_mouse_press {
+            println!(
+                "Mouse Pressed at ({}, {})",
+                cursor_position.0, cursor_position.1
+            );
+            let frag_coord = [cursor_position.0 as f32, cursor_position.1 as f32];
+            let ray: Ray = if use_perspective {
+                get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord)
+            } else {
+                get_ray_orthogonal(
+                    dw,
+                    dh,
+                    &orthogonal_ray_dir_ec,
+                    &eye_pos,
+                    &look_at_mat,
+                    &frag_coord,
+                )
+            };
+            let hit_object_idx = cast_hit_ray(&ray, &objects);
+            match hit_object_idx {
+                Some(idx) => {
+                    let obj: &Object = objects.get(idx as usize).unwrap();
+                    println!("Selected Object(idx={}, type={:?})", idx, obj.shape);
+                }
+                None => {}
+            }
+        }
 
         frame_buffer_image
             .par_iter_mut()
@@ -675,6 +705,7 @@ fn main() {
             });
         after = now.elapsed().as_millis();
         println!("Took {} ms to render one frame", after - before);
+        state.reset_flags();
     });
 }
 
