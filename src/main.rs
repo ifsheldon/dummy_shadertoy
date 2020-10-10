@@ -5,7 +5,8 @@
 // * glm source code on https://github.com/g-truc/glm
 
 use crate::data::{
-    Add, Cross, Mat3, Mat4, MatVecDot, Minus, Normalize, Product, ScalarMul, Vec3, Vec4, VecDot,
+    Add, Cross, Length, Mat3, Mat4, MatVecDot, Minus, Normalize, Product, ScalarMul, Vec3, Vec4,
+    VecDot,
 };
 use crate::shapes::{
     sdf_cube, sdf_cylinder, sdf_ellipsoid, sdf_plane, sdf_rounded_cylinder, sdf_sphere,
@@ -564,6 +565,13 @@ pub fn shade(
     return color_result;
 }
 
+#[derive(PartialEq, Debug)]
+pub enum Mode {
+    Orbit,
+    Panning,
+    FreeMove,
+}
+
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
@@ -608,8 +616,11 @@ fn main() {
     let fov_radian = (2.0_f32).atan() * 2.;
 
     let mut eye_pos = Vec3::new_xyz(0.0, 0.0, -1.0);
-    let center = Vec3::new(0.);
-    let up = Vec3::new_xyz(0.0, 1.0, 0.0);
+    let eye_pos_original = eye_pos.clone();
+    let mut center = Vec3::new(0.);
+    let center_original = center.clone();
+    let mut up = Vec3::new_xyz(0.0, 1.0, 0.0);
+    let up_original = up.clone();
 
     let dw = VIEW_PLANE_WIDTH / WIDTH_F;
     let dh = VIEW_PLANE_HEIGHT / HEIGHT_F;
@@ -622,25 +633,69 @@ fn main() {
         .input(KeyboardMouseStates::handle_input);
     let mut before = now.elapsed().as_millis();
     let mut after = before;
-    let mut theta: f32 = 0.;
+
+    let mut mode = Mode::Orbit;
+
+    let mut theta: f32 = 0.; // wc the angle between -z and +x
+    let mut phi: f32 = std::f32::consts::FRAC_PI_2; // wc complement angle of the angle between the line and z-x plane
+
     // render up to 60fps
     canvas.render(move |state, frame_buffer_image| {
-        // bottom-left(0,0) top-right(w, h)
+        let mut switch_mode = false;
         if state.received_keycode {
-            println!("Key Pressed: {:?}", state.keycode);
             match state.keycode {
-                VirtualKeyCode::A => theta += (5.0_f32).to_radians(),
-                VirtualKeyCode::D => theta -= (5.0_f32).to_radians(),
-                VirtualKeyCode::R => theta = 0.,
+                VirtualKeyCode::Key1 => {
+                    mode = Mode::Orbit;
+                    println!("Chose Mode: {:?}", mode);
+                    switch_mode = true;
+                }
+                VirtualKeyCode::Key2 => {
+                    mode = Mode::Panning;
+                    println!("Chose Mode: {:?}", mode);
+                    switch_mode = true;
+                }
+                VirtualKeyCode::Key3 => {
+                    mode = Mode::FreeMove;
+                    println!("Chose Mode: {:?}", mode);
+                    switch_mode = true
+                }
                 _ => {}
             }
         }
+        if !switch_mode && state.received_keycode && mode == Mode::Orbit {
+            println!("Key Pressed: {:?}", state.keycode);
+            match state.keycode {
+                // for orbiting around the origin
+                VirtualKeyCode::A => theta += (5.0_f32).to_radians(),
+                VirtualKeyCode::D => theta -= (5.0_f32).to_radians(),
+                VirtualKeyCode::W => {
+                    phi -= (2.5_f32).to_radians();
+                    if phi <= 0. {
+                        phi = 0.;
+                    }
+                }
+                VirtualKeyCode::S => {
+                    phi += (2.5_f32).to_radians();
+                    if phi >= std::f32::consts::PI {
+                        phi = std::f32::consts::PI;
+                    }
+                }
+                VirtualKeyCode::R => {
+                    theta = 0.;
+                    phi = std::f32::consts::FRAC_PI_2;
+                    center = center_original.clone();
+                }
+                _ => {}
+            }
+            let radius = eye_pos._minus(&center).get_length();
+            eye_pos.set_y(phi.cos() * radius);
+            eye_pos.set_z(-theta.cos() * radius * phi.sin());
+            eye_pos.set_x(theta.sin() * radius * phi.sin());
+        }
         // println!("Theta: {}", theta.to_degrees());
         before = now.elapsed().as_millis();
-        // theta = (before as f32) / 1000.;
-        eye_pos.set_z(-theta.cos());
-        eye_pos.set_x(theta.sin());
         let look_at_mat = look_at(&eye_pos, &center, &up);
+        // bottom-left(0,0) top-right(w, h)
         let cursor_position = (state.x as i32, state.y as i32);
         if state.received_mouse_press {
             println!(
@@ -667,6 +722,39 @@ fn main() {
                     println!("Selected Object(idx={}, type={:?})", idx, obj.shape);
                 }
                 None => {}
+            }
+        }
+
+        if !switch_mode && state.received_keycode && mode == Mode::Panning {
+            let mut camera_up = look_at_mat._get_column(1);
+            let mut camera_right = look_at_mat._get_column(0);
+            match state.keycode {
+                // for panning
+                VirtualKeyCode::I => {
+                    camera_up.scalar_mul_(0.1);
+                    eye_pos.add_(&camera_up);
+                    center.add_(&camera_up);
+                }
+                VirtualKeyCode::K => {
+                    camera_up.scalar_mul_(0.1);
+                    eye_pos.minus_(&camera_up);
+                    center.minus_(&camera_up);
+                }
+                VirtualKeyCode::J => {
+                    camera_right.scalar_mul_(0.1);
+                    eye_pos.minus_(&camera_right);
+                    center.minus_(&camera_right);
+                }
+                VirtualKeyCode::L => {
+                    camera_right.scalar_mul_(0.1);
+                    eye_pos.add_(&camera_right);
+                    center.add_(&camera_right);
+                }
+                VirtualKeyCode::O => {
+                    eye_pos = eye_pos_original.clone();
+                    center = center_original.clone();
+                }
+                _ => {}
             }
         }
 
