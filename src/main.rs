@@ -4,12 +4,13 @@
 // * Analytical formulas by Inigo Quilez, source: http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
 // * glm source code on https://github.com/g-truc/glm
 
-use crate::data::{Add, Length, Mat4, Minus, ScalarMul, Vec3, Vec4};
+use crate::data::{Add, Length, Mat4, Minus, ScalarMul, Vec3, Vec4, _Mat};
 use crate::shading::*;
 use crate::shapes::{
     sdf_cube, sdf_cylinder, sdf_ellipsoid, sdf_plane, sdf_rounded_cylinder, sdf_sphere,
 };
 use crate::state::KeyboardMouseStates;
+use crate::transformations::*;
 use pixel_canvas::input::glutin::event::VirtualKeyCode;
 use pixel_canvas::{Canvas, Color};
 use rayon::prelude::*;
@@ -22,6 +23,7 @@ mod err;
 mod shading;
 mod shapes;
 mod state;
+mod transformations;
 
 const EPSILON: f32 = 0.0001;
 const MIN_DIST: f32 = 0.0;
@@ -145,23 +147,6 @@ pub fn add_light(lights: &mut Vec<Light>, position: Vec3, ambient: Vec3, source:
     lights.push(l);
 }
 
-pub fn translate_obj(mat: Mat4, translation: &Vec3) -> Mat4 {
-    let mut result = mat.clone();
-    let translation = translation.scalar_mul(-1.);
-    let m0 = mat._get_column(0);
-    let m1 = mat._get_column(1);
-    let m2 = mat._get_column(2);
-    let m3 = mat._get_column(3);
-    let mut m0t0 = m0.scalar_mul(translation.x());
-    let m1t1 = m1.scalar_mul(translation.y());
-    let m2t2 = m2.scalar_mul(translation.z());
-    m0t0.add_(&m1t1);
-    m0t0.add_(&m2t2);
-    m0t0.add_(&m3);
-    result._set_column(3, &m0t0);
-    return result;
-}
-
 pub fn init_scene(
     objects: &mut Vec<Object>,
     materials: &mut Vec<Material>,
@@ -251,7 +236,10 @@ fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
     const SELECT_CIRCLE_RADIUS_SQUARE: i32 = 5 * 5;
-    let orthogonal_ray_dir_ec: Vec3 = Vec3::new_xyz(0., 0., 1.);
+    let orthogonal_ray_dir_ec = Vec3::new_xyz(0., 0., 1.);
+    let x_axis = Vec3::new_xyz(1., 0., 0.);
+    let y_axis = Vec3::new_xyz(0., 1., 0.);
+    let z_axis = Vec3::new_xyz(0., 0., 1.);
     let use_perspective;
     loop {
         println!("Use Perspective? y for perspective view, n for orthogonal view");
@@ -318,6 +306,7 @@ fn main() {
 
     // render up to 60fps
     canvas.render(move |state, frame_buffer_image| {
+        // switching modes
         let mut switch_mode = false;
         if state.received_keycode {
             match state.keycode {
@@ -353,6 +342,7 @@ fn main() {
                 _ => {}
             }
         }
+        // Orbiting camera
         if !switch_mode && state.received_keycode && mode == Mode::Orbit {
             println!("Key Pressed: {:?}", state.keycode);
             match state.keycode {
@@ -383,7 +373,7 @@ fn main() {
             eye_pos.set_z(-theta.cos() * radius * phi.sin());
             eye_pos.set_x(theta.sin() * radius * phi.sin());
         }
-
+        // Moving camera in wc
         if !switch_mode && state.received_keycode && mode == Mode::FreeMove {
             match state.keycode {
                 VirtualKeyCode::A => eye_pos.set_x(eye_pos.x() - 0.1),
@@ -403,6 +393,7 @@ fn main() {
         let look_at_mat = look_at(&eye_pos, &center, &up);
         // bottom-left(0,0) top-right(w, h)
         let cursor_position = (state.x as i32, state.y as i32);
+        // selecting object
         if state.received_mouse_press {
             println!(
                 "Mouse Pressed at ({}, {})",
@@ -435,7 +426,7 @@ fn main() {
                             );
                             center = hit_pos.clone();
                             // may need to adjust parameter according to camera move mode?
-                            unimplemented!()
+                            // unimplemented!()
                         }
                         Mode::Select => {
                             println!("Selected Object(idx={}, type={:?})", idx, obj.shape,);
@@ -451,7 +442,88 @@ fn main() {
             }
         }
 
-        if !switch_mode && state.received_keycode && mode == Mode::Panning {
+        let mut rotating_or_scaling = false;
+        if !switch_mode && state.received_keycode && selected_obj_idx != -1 {
+            let obj = objects.get_mut(selected_obj_idx as usize).unwrap();
+            let identity = Mat4::identity();
+            match state.keycode {
+                // Rotate around x
+                VirtualKeyCode::I => {
+                    //FIXME
+                    let rotate = rotate_obj(identity, (5.0_f32).to_radians(), x_axis.clone());
+                    let new_transformation = rotate.dot_mat(&obj.transformation);
+                    obj.transformation = new_transformation;
+                    rotating_or_scaling = true;
+                }
+                VirtualKeyCode::K => {
+                    //FIXME
+                    let rotate = rotate_obj(identity, (5.0_f32).to_radians(), x_axis.clone());
+                    let new_transformation = rotate.dot_mat(&obj.transformation);
+                    obj.transformation = new_transformation;
+                    rotating_or_scaling = true;
+                }
+                // Rotate around y
+                VirtualKeyCode::J => {
+                    //FIXME
+                    let rotate = rotate_obj(identity, (5.0_f32).to_radians(), y_axis.clone());
+                    let new_transformation = rotate.dot_mat(&obj.transformation);
+                    obj.transformation = new_transformation;
+                    rotating_or_scaling = true;
+                }
+                VirtualKeyCode::L => {
+                    // FIXME
+                    let rotate = rotate_obj(identity, (5.0_f32).to_radians(), y_axis.clone());
+                    let new_transformation = rotate.dot_mat(&obj.transformation);
+                    obj.transformation = new_transformation;
+                    rotating_or_scaling = true;
+                }
+                // Rotate around z
+                VirtualKeyCode::U => {
+                    let rotate = rotate_obj(identity, (5.0_f32).to_radians(), z_axis.clone());
+                    let new_transformation = rotate.dot_mat(&obj.transformation);
+                    obj.transformation = new_transformation;
+                    rotating_or_scaling = true;
+                }
+                VirtualKeyCode::O => {
+                    let rotate = rotate_obj(identity, (-5.0_f32).to_radians(), z_axis.clone());
+                    let new_transformation = rotate.dot_mat(&obj.transformation);
+                    obj.transformation = new_transformation;
+                    rotating_or_scaling = true;
+                }
+                // Scale
+                VirtualKeyCode::PageUp => {
+                    obj.transformation = scale(&obj.transformation, 1.1);
+                    rotating_or_scaling = true;
+                }
+                VirtualKeyCode::PageDown => {
+                    obj.transformation = scale(&obj.transformation, 0.85);
+                    rotating_or_scaling = true;
+                }
+                // reset
+                VirtualKeyCode::M => {
+                    obj.transformation = obj.original_transformation.clone();
+                    rotating_or_scaling = true;
+                }
+                _ => {}
+            }
+        }
+        // zooming
+        if !rotating_or_scaling && !switch_mode && state.received_keycode && mode == Mode::Zoom {
+            let mut camera_focus_direction = look_at_mat._get_column(2);
+            match state.keycode {
+                VirtualKeyCode::Q => {
+                    camera_focus_direction.scalar_mul_(0.1);
+                    eye_pos.add_(&camera_focus_direction);
+                }
+                VirtualKeyCode::E => {
+                    camera_focus_direction.scalar_mul_(0.1);
+                    eye_pos.minus_(&camera_focus_direction);
+                }
+                _ => {}
+            }
+        }
+        // panning camera or the selected object
+        if !rotating_or_scaling && !switch_mode && state.received_keycode && mode == Mode::Panning {
             let mut camera_up = look_at_mat._get_column(1);
             let mut camera_right = look_at_mat._get_column(0);
             if selected_obj_idx != -1 {
