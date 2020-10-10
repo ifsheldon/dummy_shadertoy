@@ -23,6 +23,7 @@ pub struct Object {
     pub transformation: Mat4,
     pub shape: ShapeTypes,
     pub material_id: usize,
+    pub original_transformation: Mat4,
 }
 
 #[derive(Copy, Clone)]

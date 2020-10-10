@@ -46,6 +46,7 @@ pub fn add_cube(
 ) {
     let o = Object {
         shape: ShapeTypes::Cube(width, height, depth),
+        original_transformation: transformation.clone(),
         transformation,
         material_id,
     };
@@ -65,6 +66,7 @@ pub fn add_plane(
             coefficients.z(),
             coefficients.w(),
         ),
+        original_transformation: transformation.clone(),
         transformation,
         material_id,
     };
@@ -79,6 +81,7 @@ pub fn add_sphere(
 ) {
     let o = Object {
         transformation,
+        original_transformation: transformation.clone(),
         shape: ShapeTypes::Sphere(radius),
         material_id,
     };
@@ -93,6 +96,7 @@ pub fn add_ellipsoid(
 ) {
     let o = Object {
         transformation,
+        original_transformation: transformation.clone(),
         shape: ShapeTypes::Ellipsoid(dimensions.x(), dimensions.y(), dimensions.z()),
         material_id,
     };
@@ -109,6 +113,7 @@ pub fn add_rounded_cylinder(
 ) {
     let o = Object {
         transformation,
+        original_transformation: transformation.clone(),
         shape: ShapeTypes::RoundedCylinder(radius, round_radius, height),
         material_id,
     };
@@ -124,6 +129,7 @@ pub fn add_cylinder(
 ) {
     let o = Object {
         transformation,
+        original_transformation: transformation.clone(),
         shape: ShapeTypes::Cylinder(radius, height),
         material_id,
     };
@@ -237,6 +243,8 @@ pub enum Mode {
     Orbit,
     Panning,
     FreeMove,
+    Zoom,
+    Select,
 }
 
 fn main() {
@@ -306,6 +314,8 @@ fn main() {
     let mut theta: f32 = 0.; // wc the angle between -z and +x
     let mut phi: f32 = std::f32::consts::FRAC_PI_2; // wc complement angle of the angle between the line and z-x plane
 
+    let mut selected_obj_idx: i32 = -1;
+
     // render up to 60fps
     canvas.render(move |state, frame_buffer_image| {
         let mut switch_mode = false;
@@ -325,6 +335,20 @@ fn main() {
                     mode = Mode::FreeMove;
                     println!("Chose Mode: {:?}", mode);
                     switch_mode = true
+                }
+                VirtualKeyCode::Z => {
+                    mode = Mode::Zoom;
+                    println!("Chose Mode: {:?}", mode);
+                    switch_mode = true
+                }
+                VirtualKeyCode::X => {
+                    mode = Mode::Select;
+                    println!("Chose Mode: {:?}", mode);
+                    switch_mode = true
+                }
+                VirtualKeyCode::C => {
+                    selected_obj_idx = -1;
+                    switch_mode = true;
                 }
                 _ => {}
             }
@@ -375,7 +399,6 @@ fn main() {
                 _ => {}
             }
         }
-        // println!("Theta: {}", theta.to_degrees());
         before = now.elapsed().as_millis();
         let look_at_mat = look_at(&eye_pos, &center, &up);
         // bottom-left(0,0) top-right(w, h)
@@ -402,14 +425,27 @@ fn main() {
             match hit_object_idx {
                 Some((idx, hit_pos)) => {
                     let obj: &Object = objects.get(idx as usize).unwrap();
-                    println!(
-                        "Selected Object(idx={}, type={:?}), hit position ({}, {}, {})",
-                        idx,
-                        obj.shape,
-                        hit_pos.x(),
-                        hit_pos.y(),
-                        hit_pos.z()
-                    );
+                    match mode {
+                        Mode::Zoom => {
+                            println!(
+                                "Focused on hit position ({}, {}, {})",
+                                hit_pos.x(),
+                                hit_pos.y(),
+                                hit_pos.z()
+                            );
+                            center = hit_pos.clone();
+                            // may need to adjust parameter according to camera move mode?
+                            unimplemented!()
+                        }
+                        Mode::Select => {
+                            println!("Selected Object(idx={}, type={:?})", idx, obj.shape,);
+                            selected_obj_idx = idx;
+                        }
+                        _ => println!(
+                            "Mouse Pressed at ({}, {})",
+                            cursor_position.0, cursor_position.1
+                        ),
+                    }
                 }
                 None => {}
             }
@@ -418,33 +454,68 @@ fn main() {
         if !switch_mode && state.received_keycode && mode == Mode::Panning {
             let mut camera_up = look_at_mat._get_column(1);
             let mut camera_right = look_at_mat._get_column(0);
-            match state.keycode {
-                // for panning
-                VirtualKeyCode::W => {
-                    camera_up.scalar_mul_(0.1);
-                    eye_pos.add_(&camera_up);
-                    center.add_(&camera_up);
+            if selected_obj_idx != -1 {
+                let obj = objects.get_mut(selected_obj_idx as usize).unwrap();
+                match state.keycode {
+                    // for panning
+                    VirtualKeyCode::W => {
+                        camera_up.scalar_mul_(0.1);
+                        let new_transformation =
+                            translate_obj(obj.transformation.clone(), &camera_up);
+                        obj.transformation = new_transformation;
+                    }
+                    VirtualKeyCode::S => {
+                        camera_up.scalar_mul_(-0.1);
+                        let new_transformation =
+                            translate_obj(obj.transformation.clone(), &camera_up);
+                        obj.transformation = new_transformation;
+                    }
+                    VirtualKeyCode::A => {
+                        camera_right.scalar_mul_(-0.1);
+                        let new_transformation =
+                            translate_obj(obj.transformation.clone(), &camera_right);
+                        obj.transformation = new_transformation;
+                    }
+                    VirtualKeyCode::D => {
+                        camera_right.scalar_mul_(0.1);
+                        let new_transformation =
+                            translate_obj(obj.transformation.clone(), &camera_right);
+                        obj.transformation = new_transformation;
+                    }
+                    VirtualKeyCode::R => {
+                        obj.transformation = obj.original_transformation.clone();
+                    }
+                    _ => {}
                 }
-                VirtualKeyCode::S => {
-                    camera_up.scalar_mul_(0.1);
-                    eye_pos.minus_(&camera_up);
-                    center.minus_(&camera_up);
+            } else {
+                match state.keycode {
+                    // for panning
+                    VirtualKeyCode::W => {
+                        camera_up.scalar_mul_(0.1);
+                        eye_pos.add_(&camera_up);
+                        center.add_(&camera_up);
+                    }
+                    VirtualKeyCode::S => {
+                        camera_up.scalar_mul_(0.1);
+                        eye_pos.minus_(&camera_up);
+                        center.minus_(&camera_up);
+                    }
+                    VirtualKeyCode::A => {
+                        camera_right.scalar_mul_(0.1);
+                        eye_pos.minus_(&camera_right);
+                        center.minus_(&camera_right);
+                    }
+                    VirtualKeyCode::D => {
+                        camera_right.scalar_mul_(0.1);
+                        eye_pos.add_(&camera_right);
+                        center.add_(&camera_right);
+                    }
+                    VirtualKeyCode::R => {
+                        eye_pos = eye_pos_original.clone();
+                        center = center_original.clone();
+                    }
+                    _ => {}
                 }
-                VirtualKeyCode::A => {
-                    camera_right.scalar_mul_(0.1);
-                    eye_pos.minus_(&camera_right);
-                    center.minus_(&camera_right);
-                }
-                VirtualKeyCode::D => {
-                    camera_right.scalar_mul_(0.1);
-                    eye_pos.add_(&camera_right);
-                    center.add_(&camera_right);
-                }
-                VirtualKeyCode::R => {
-                    eye_pos = eye_pos_original.clone();
-                    center = center_original.clone();
-                }
-                _ => {}
             }
         }
 
