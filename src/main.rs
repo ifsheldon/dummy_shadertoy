@@ -540,124 +540,143 @@ pub fn shade(
     return color_result;
 }
 
-// fn main() {
-//     const VIEW_PLANE_WIDTH: f32 = 4.;
-//     const VIEW_PLANE_HEIGHT: f32 = 3.;
-//     let use_perspective;
-//     loop {
-//         println!("Use Perspective? y for perspective view, n for orthogonal view");
-//         let mut buf = String::new();
-//         let result = stdin().read_line(&mut buf);
-//         match result {
-//             Ok(_) => {
-//                 if buf.len() <= 3 {
-//                     let s = buf.to_lowercase();
-//                     if s.contains("y") {
-//                         use_perspective = true;
-//                         println!("Using Perspective");
-//                         break;
-//                     } else if s.contains("n") {
-//                         use_perspective = false;
-//                         println!("Using Orthogonal");
-//                         break;
-//                     } else {
-//                         eprintln!("Wrong Input, try again");
-//                     }
-//                 } else {
-//                     println!("Entered too many characters, try again");
-//                 }
-//             }
-//             Err(e) => {
-//                 eprintln!("Unexpected Error, exiting");
-//                 eprintln!("{}", e);
-//                 exit(-1);
-//             }
-//         }
-//     }
-//
-//     let mut objects = Vec::new();
-//     let mut lights = Vec::new();
-//     let mut materials = Vec::new();
-//     init_scene(&mut objects, &mut materials, &mut lights);
-//     let fov_radian = (2.0_f32).atan() * 2.;
-//
-//     let mut eye_pos = Vec3::new_xyz(0.0, 0.0, -1.0);
-//     let center = Vec3::new(0.);
-//     let up = Vec3::new_xyz(0.0, 1.0, 0.0);
-//
-//     let dw = VIEW_PLANE_WIDTH / WIDTH_F;
-//     let dh = VIEW_PLANE_HEIGHT / HEIGHT_F;
-//
-//     let now = Instant::now();
-//     // configure the window/canvas
-//     let canvas = Canvas::new(WIDTH, HEIGHT).title("Dynamic Raytracer");
-//     let mut before = now.elapsed().as_millis();
-//     let mut after = before;
-//     let mut theta: f32 = 0.;
-//     // render up to 60fps
-//     canvas.render(move |_state, frame_buffer_image| {
-//         // bottom-left(0,0) top-right(w, h)
-//         before = now.elapsed().as_millis();
-//         theta = (before as f32) / 1000.;
-//         eye_pos.set_z(-theta.cos());
-//         eye_pos.set_x(theta.sin());
-//         let look_at_mat = look_at(&eye_pos, &center, &up);
-//         frame_buffer_image
-//             .par_iter_mut()
-//             .enumerate()
-//             .for_each(|(idx, pixel)| {
-//                 let y = idx / WIDTH;
-//                 let x = idx % WIDTH;
-//                 let frag_coord = [x as f32, y as f32];
-//                 let primary_ray: Ray;
-//                 if use_perspective {
-//                     primary_ray =
-//                         get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
-//                 } else {
-//                     let wc_ray_dir = look_at_mat.mat_vec_dot(&Vec3::new_xyz(0., 0., 1.));
-//                     primary_ray = get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord);
-//                 }
-//                 *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
-//             });
-//         after = now.elapsed().as_millis();
-//         println!("Took {} ms to render one frame", after - before);
-//     });
-// }
+fn main() {
+    const VIEW_PLANE_WIDTH: f32 = 4.;
+    const VIEW_PLANE_HEIGHT: f32 = 3.;
+    let use_perspective;
+    loop {
+        println!("Use Perspective? y for perspective view, n for orthogonal view");
+        let mut buf = String::new();
+        let result = stdin().read_line(&mut buf);
+        match result {
+            Ok(_) => {
+                if buf.len() <= 3 {
+                    let s = buf.to_lowercase();
+                    if s.contains("y") {
+                        use_perspective = true;
+                        println!("Using Perspective");
+                        break;
+                    } else if s.contains("n") {
+                        use_perspective = false;
+                        println!("Using Orthogonal");
+                        break;
+                    } else {
+                        eprintln!("Wrong Input, try again");
+                    }
+                } else {
+                    println!("Entered too many characters, try again");
+                }
+            }
+            Err(e) => {
+                eprintln!("Unexpected Error, exiting");
+                eprintln!("{}", e);
+                exit(-1);
+            }
+        }
+    }
 
-fn main()
-{
-    let canvas = Canvas::new(512, 512)
-        .title("Tile")
-        .state(KeyboardMouseStates::new())
-        .input(KeyboardMouseStates::handle_input);
-    // The canvas will render for you at up to 60fps.
-    canvas.render(|state, image| {
-        // Modify the `image` based on your state.
-        let width = image.width() as usize;
-        let cursor_position = [state.x as i32, state.y as i32];
+    let mut objects = Vec::new();
+    let mut lights = Vec::new();
+    let mut materials = Vec::new();
+    init_scene(&mut objects, &mut materials, &mut lights);
+    let fov_radian = (2.0_f32).atan() * 2.;
+
+    let mut eye_pos = Vec3::new_xyz(0.0, 0.0, -1.0);
+    let center = Vec3::new(0.);
+    let up = Vec3::new_xyz(0.0, 1.0, 0.0);
+
+    let dw = VIEW_PLANE_WIDTH / WIDTH_F;
+    let dh = VIEW_PLANE_HEIGHT / HEIGHT_F;
+
+    let now = Instant::now();
+    // configure the window/canvas
+    let canvas = Canvas::new(WIDTH, HEIGHT).title("Dynamic Raytracer").state(KeyboardMouseStates::new()).input(KeyboardMouseStates::handle_input);
+    let mut before = now.elapsed().as_millis();
+    let mut after = before;
+    let mut theta: f32 = 0.;
+    // render up to 60fps
+    canvas.render(move |state, frame_buffer_image| {
+        // bottom-left(0,0) top-right(w, h)
+        let cursor_position = (state.x as i32, state.y as i32);
         if state.received_mouse_press
         {
-            println!("Mouse Pressed, ({}, {})", cursor_position[0], cursor_position[1]);
+            println!("Mouse Pressed at ({}, {})", cursor_position.0, cursor_position.1);
         }
         if state.received_keycode
         {
-            println!("Key Got")
+            println!("Key Pressed: {:?}", state.keycode);
         }
         state.reset_flags();
-        for (y, row) in image.chunks_mut(width).enumerate() {
-            for (x, pixel) in row.iter_mut().enumerate() {
-                let dx = x as i32 - cursor_position[0];
-                let dy = y as i32 - cursor_position[1];
+        before = now.elapsed().as_millis();
+        theta = (before as f32) / 1000.;
+        eye_pos.set_z(-theta.cos());
+        eye_pos.set_x(theta.sin());
+        let look_at_mat = look_at(&eye_pos, &center, &up);
+        frame_buffer_image
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(idx, pixel)| {
+                let y = idx / WIDTH;
+                let x = idx % WIDTH;
+                let dx = x as i32 - cursor_position.0;
+                let dy = y as i32 - cursor_position.1;
                 let dist = dx * dx + dy * dy;
-                *pixel = Color {
-                    r: if dist < 12 * 12 { dy as u8 } else { 0 },
-                    g: if dist < 12 * 12 { dx as u8 } else { 0 },
-                    b: (x * y) as u8,
+                let in_circle = dist < 10*10;
+                if in_circle
+                {
+                    *pixel = Color { r: 255, g: 255, b: 255 };
+                    return;
                 }
-            }
-        }
+                let frag_coord = [x as f32, y as f32];
+                let primary_ray: Ray;
+                if use_perspective {
+                    primary_ray =
+                        get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                } else {
+                    let wc_ray_dir = look_at_mat.mat_vec_dot(&Vec3::new_xyz(0., 0., 1.));
+                    primary_ray = get_ray_orthogonal(dw, dh, &wc_ray_dir, &frag_coord);
+                }
+                *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
+            });
+        after = now.elapsed().as_millis();
+        println!("Took {} ms to render one frame", after - before);
     });
 }
+
+// fn main()
+// {
+//     let canvas = Canvas::new(512, 512)
+//         .title("Tile")
+//         .state(KeyboardMouseStates::new())
+//         .input(KeyboardMouseStates::handle_input);
+//     // The canvas will render for you at up to 60fps.
+//     canvas.render(|state, image| {
+//         // Modify the `image` based on your state.
+//         let width = image.width() as usize;
+//         let cursor_position = [state.x as i32, state.y as i32];
+//         if state.received_mouse_press
+//         {
+//             println!("Mouse Pressed, ({}, {})", cursor_position[0], cursor_position[1]);
+//         }
+//         if state.received_keycode
+//         {
+//             println!("Key Got")
+//         }
+//         state.reset_flags();
+//         for (y, row) in image.chunks_mut(width).enumerate() {
+//             for (x, pixel) in row.iter_mut().enumerate() {
+//                 let dx = x as i32 - cursor_position[0];
+//                 let dy = y as i32 - cursor_position[1];
+//                 let dist = dx * dx + dy * dy;
+//                 *pixel = Color {
+//                     r: if dist < 12 * 12 { dy as u8 } else { 0 },
+//                     g: if dist < 12 * 12 { dx as u8 } else { 0 },
+//                     b: (x * y) as u8,
+//                 }
+//             }
+//         }
+//     });
+// }
 
 #[inline]
 fn to_color(mut color: Vec3) -> Color {
