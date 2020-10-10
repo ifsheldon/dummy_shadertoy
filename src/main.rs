@@ -222,12 +222,13 @@ pub fn init_scene(
     );
 }
 
-pub fn cast_hit_ray(ray: &Ray, objects: &Vec<Object>) -> Option<i32> {
+pub fn cast_hit_ray(ray: &Ray, objects: &Vec<Object>) -> Option<(i32, Vec3)> {
     let (obj_idx, dist) = shortest_dist_to_surface(objects, &ray.origin, &ray.direction, -1);
     return if dist > MAX_DIST - EPSILON {
         None
     } else {
-        Some(obj_idx)
+        let hit_position = ray.origin._add(&ray.direction.scalar_mul(dist));
+        Some((obj_idx, hit_position))
     };
 }
 
@@ -358,6 +359,22 @@ fn main() {
             eye_pos.set_z(-theta.cos() * radius * phi.sin());
             eye_pos.set_x(theta.sin() * radius * phi.sin());
         }
+
+        if !switch_mode && state.received_keycode && mode == Mode::FreeMove {
+            match state.keycode {
+                VirtualKeyCode::A => eye_pos.set_x(eye_pos.x() - 0.1),
+                VirtualKeyCode::D => eye_pos.set_x(eye_pos.x() + 0.1),
+                VirtualKeyCode::W => eye_pos.set_z(eye_pos.z() + 0.1),
+                VirtualKeyCode::S => eye_pos.set_z(eye_pos.z() - 0.1),
+                VirtualKeyCode::Q => eye_pos.set_y(eye_pos.y() + 0.1),
+                VirtualKeyCode::E => eye_pos.set_y(eye_pos.y() - 0.1),
+                VirtualKeyCode::R => {
+                    eye_pos = eye_pos_original.clone();
+                    center = center_original.clone();
+                }
+                _ => {}
+            }
+        }
         // println!("Theta: {}", theta.to_degrees());
         before = now.elapsed().as_millis();
         let look_at_mat = look_at(&eye_pos, &center, &up);
@@ -383,9 +400,16 @@ fn main() {
             };
             let hit_object_idx = cast_hit_ray(&ray, &objects);
             match hit_object_idx {
-                Some(idx) => {
+                Some((idx, hit_pos)) => {
                     let obj: &Object = objects.get(idx as usize).unwrap();
-                    println!("Selected Object(idx={}, type={:?})", idx, obj.shape);
+                    println!(
+                        "Selected Object(idx={}, type={:?}), hit position ({}, {}, {})",
+                        idx,
+                        obj.shape,
+                        hit_pos.x(),
+                        hit_pos.y(),
+                        hit_pos.z()
+                    );
                 }
                 None => {}
             }
@@ -396,27 +420,27 @@ fn main() {
             let mut camera_right = look_at_mat._get_column(0);
             match state.keycode {
                 // for panning
-                VirtualKeyCode::I => {
+                VirtualKeyCode::W => {
                     camera_up.scalar_mul_(0.1);
                     eye_pos.add_(&camera_up);
                     center.add_(&camera_up);
                 }
-                VirtualKeyCode::K => {
+                VirtualKeyCode::S => {
                     camera_up.scalar_mul_(0.1);
                     eye_pos.minus_(&camera_up);
                     center.minus_(&camera_up);
                 }
-                VirtualKeyCode::J => {
+                VirtualKeyCode::A => {
                     camera_right.scalar_mul_(0.1);
                     eye_pos.minus_(&camera_right);
                     center.minus_(&camera_right);
                 }
-                VirtualKeyCode::L => {
+                VirtualKeyCode::D => {
                     camera_right.scalar_mul_(0.1);
                     eye_pos.add_(&camera_right);
                     center.add_(&camera_right);
                 }
-                VirtualKeyCode::O => {
+                VirtualKeyCode::R => {
                     eye_pos = eye_pos_original.clone();
                     center = center_original.clone();
                 }
