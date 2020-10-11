@@ -455,7 +455,7 @@ fn main() {
                     rotating_or_scaling = true;
                 }
                 VirtualKeyCode::K => {
-                    let rotate = rotate_obj(identity, (5.0_f32).to_radians(), x_axis.clone());
+                    let rotate = rotate_obj(identity, (-5.0_f32).to_radians(), x_axis.clone());
                     let new_transformation = rotate.dot_mat(&obj.transformation);
                     obj.transformation = new_transformation;
                     rotating_or_scaling = true;
@@ -468,7 +468,7 @@ fn main() {
                     rotating_or_scaling = true;
                 }
                 VirtualKeyCode::L => {
-                    let rotate = rotate_obj(identity, (5.0_f32).to_radians(), y_axis.clone());
+                    let rotate = rotate_obj(identity, (-5.0_f32).to_radians(), y_axis.clone());
                     let new_transformation = rotate.dot_mat(&obj.transformation);
                     obj.transformation = new_transformation;
                     rotating_or_scaling = true;
