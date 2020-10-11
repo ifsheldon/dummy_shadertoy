@@ -316,53 +316,53 @@ fn main() {
     canvas.render(move |state, frame_buffer_image| {
         before = now.elapsed().as_millis();
         // switching modes
-        let mut switch_mode = false;
+        let mut switching_mode = false;
         if state.received_keycode {
             match state.keycode {
                 VirtualKeyCode::Key1 => {
                     mode = Mode::Orbit;
                     println!("Chose Mode: {:?}", mode);
-                    switch_mode = true;
+                    switching_mode = true;
                 }
                 VirtualKeyCode::Key2 => {
                     mode = Mode::Panning;
                     println!("Chose Mode: {:?}", mode);
-                    switch_mode = true;
+                    switching_mode = true;
                 }
                 VirtualKeyCode::Key3 => {
                     mode = Mode::FreeMove;
                     println!("Chose Mode: {:?}", mode);
-                    switch_mode = true
+                    switching_mode = true
                 }
                 VirtualKeyCode::Key4 => {
                     mode = Mode::AutoMoveCam;
                     println!("Chose Mode: {:?}", mode);
-                    switch_mode = true;
+                    switching_mode = true;
                 }
                 VirtualKeyCode::Z => {
                     mode = Mode::Zoom;
                     println!("Chose Mode: {:?}", mode);
-                    switch_mode = true
+                    switching_mode = true
                 }
                 VirtualKeyCode::X => {
                     mode = Mode::Select;
                     println!("Chose Mode: {:?}", mode);
-                    switch_mode = true
+                    switching_mode = true
                 }
                 VirtualKeyCode::C => {
                     selected_obj_idx = -1;
-                    switch_mode = true;
+                    switching_mode = true;
                 }
                 VirtualKeyCode::V => {
                     mode = Mode::MovingLight;
                     println!("Chose Mode: {:?}", mode);
-                    switch_mode = true;
+                    switching_mode = true;
                 }
                 _ => {}
             }
         }
-
-        if !switch_mode && state.received_keycode && mode == Mode::MovingLight {
+        // moving the light
+        if !switching_mode && state.received_keycode && mode == Mode::MovingLight {
             let light = lights.get_mut(0).unwrap();
             let light_pos = &mut light.position;
             match state.keycode {
@@ -377,7 +377,7 @@ fn main() {
             }
         }
         // Orbiting camera
-        if !switch_mode && state.received_keycode && mode == Mode::Orbit {
+        if !switching_mode && state.received_keycode && mode == Mode::Orbit {
             println!("Key Pressed: {:?}", state.keycode);
             match state.keycode {
                 // for orbiting around the origin
@@ -408,7 +408,7 @@ fn main() {
             eye_pos.set_x(theta.sin() * radius * phi.sin());
         }
         // Moving camera in wc
-        if !switch_mode && state.received_keycode && mode == Mode::FreeMove {
+        if !switching_mode && state.received_keycode && mode == Mode::FreeMove {
             match state.keycode {
                 VirtualKeyCode::A => eye_pos.set_x(eye_pos.x() - 0.1),
                 VirtualKeyCode::D => eye_pos.set_x(eye_pos.x() + 0.1),
@@ -476,7 +476,7 @@ fn main() {
         }
 
         let mut rotating_or_scaling = false;
-        if !switch_mode && state.received_keycode && selected_obj_idx != -1 {
+        if !switching_mode && state.received_keycode && selected_obj_idx != -1 {
             let obj = objects.get_mut(selected_obj_idx as usize).unwrap();
             let identity = Mat4::identity();
             match state.keycode {
@@ -537,7 +537,7 @@ fn main() {
             }
         }
         // zooming
-        if !rotating_or_scaling && !switch_mode && state.received_keycode && mode == Mode::Zoom {
+        if !rotating_or_scaling && !switching_mode && state.received_keycode && mode == Mode::Zoom {
             let mut camera_focus_direction = look_at_mat._get_column(2);
             match state.keycode {
                 VirtualKeyCode::Q => {
@@ -552,7 +552,7 @@ fn main() {
             }
         }
         // panning camera or the selected object
-        if !rotating_or_scaling && !switch_mode && state.received_keycode && mode == Mode::Panning {
+        if !rotating_or_scaling && !switching_mode && state.received_keycode && mode == Mode::Panning {
             let mut camera_up = look_at_mat._get_column(1);
             let mut camera_right = look_at_mat._get_column(0);
             if selected_obj_idx != -1 {
@@ -619,7 +619,7 @@ fn main() {
                 }
             }
         }
-
+        // for automatic moving the camera
         if mode == Mode::AutoMoveCam {
             eye_pos.set_x(auto_moving_angle.sin());
             eye_pos.set_z(-auto_moving_angle.cos());
