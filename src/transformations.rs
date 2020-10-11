@@ -17,6 +17,7 @@ pub fn translate_obj(mat: Mat4, translation: &Vec3) -> Mat4 {
     return result;
 }
 
+// Reference: https://en.wikipedia.org/wiki/Rotation_matrix
 pub fn rotate_obj(transformation: Mat4, angle: f32, mut axis: Vec3) -> Mat4 {
     let angle = -angle;
     let cos = angle.cos();
