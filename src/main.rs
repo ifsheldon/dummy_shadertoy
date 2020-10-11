@@ -232,6 +232,7 @@ pub enum Mode {
     Zoom,
     Select,
     MovingLight,
+    AutoMoveCam,
 }
 
 fn main() {
@@ -298,6 +299,9 @@ fn main() {
         .input(KeyboardMouseStates::handle_input);
     let mut before = now.elapsed().as_millis();
     let mut after = before;
+    let mut render_time_ema = 0.;
+    let ema_alpha = 0.95;
+    let ema_beta = 1. - ema_alpha;
 
     let mut mode = Mode::Orbit;
 
@@ -305,9 +309,12 @@ fn main() {
     let mut phi: f32 = std::f32::consts::FRAC_PI_2; // wc complement angle of the angle between the line and z-x plane
 
     let mut selected_obj_idx: i32 = -1;
+    let mut auto_moving_angle: f32 = 0.;
+    let angle_delta = (2.5_f32).to_radians();
 
     // render up to 60fps
     canvas.render(move |state, frame_buffer_image| {
+        before = now.elapsed().as_millis();
         // switching modes
         let mut switch_mode = false;
         if state.received_keycode {
@@ -326,6 +333,11 @@ fn main() {
                     mode = Mode::FreeMove;
                     println!("Chose Mode: {:?}", mode);
                     switch_mode = true
+                }
+                VirtualKeyCode::Key4 => {
+                    mode = Mode::AutoMoveCam;
+                    println!("Chose Mode: {:?}", mode);
+                    switch_mode = true;
                 }
                 VirtualKeyCode::Z => {
                     mode = Mode::Zoom;
@@ -411,7 +423,6 @@ fn main() {
                 _ => {}
             }
         }
-        before = now.elapsed().as_millis();
         let look_at_mat = look_at(&eye_pos, &center, &up);
         // bottom-left(0,0) top-right(w, h)
         let cursor_position = (state.x as i32, state.y as i32);
@@ -609,6 +620,12 @@ fn main() {
             }
         }
 
+        if mode == Mode::AutoMoveCam {
+            eye_pos.set_x(auto_moving_angle.sin());
+            eye_pos.set_z(-auto_moving_angle.cos());
+            eye_pos.set_y(0.);
+            auto_moving_angle += angle_delta;
+        }
         frame_buffer_image
             .par_iter_mut()
             .enumerate()
@@ -643,7 +660,10 @@ fn main() {
                 *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
             });
         after = now.elapsed().as_millis();
-        println!("Took {} ms to render one frame", after - before);
+        let t = after - before;
+        println!("Took {} ms to render one frame", t);
+        render_time_ema = ema_alpha * render_time_ema + ema_beta * (t as f32);
+        println!("Render time EMA = {}", render_time_ema);
         state.reset_flags();
     });
 }
