@@ -449,14 +449,12 @@ fn main() {
             match state.keycode {
                 // Rotate around x
                 VirtualKeyCode::I => {
-                    //FIXME
                     let rotate = rotate_obj(identity, (5.0_f32).to_radians(), x_axis.clone());
                     let new_transformation = rotate.dot_mat(&obj.transformation);
                     obj.transformation = new_transformation;
                     rotating_or_scaling = true;
                 }
                 VirtualKeyCode::K => {
-                    //FIXME
                     let rotate = rotate_obj(identity, (5.0_f32).to_radians(), x_axis.clone());
                     let new_transformation = rotate.dot_mat(&obj.transformation);
                     obj.transformation = new_transformation;
@@ -464,14 +462,12 @@ fn main() {
                 }
                 // Rotate around y
                 VirtualKeyCode::J => {
-                    //FIXME
                     let rotate = rotate_obj(identity, (5.0_f32).to_radians(), y_axis.clone());
                     let new_transformation = rotate.dot_mat(&obj.transformation);
                     obj.transformation = new_transformation;
                     rotating_or_scaling = true;
                 }
                 VirtualKeyCode::L => {
-                    // FIXME
                     let rotate = rotate_obj(identity, (5.0_f32).to_radians(), y_axis.clone());
                     let new_transformation = rotate.dot_mat(&obj.transformation);
                     obj.transformation = new_transformation;
