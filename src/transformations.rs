@@ -20,30 +20,25 @@ pub fn translate_obj(mat: Mat4, translation: &Vec3) -> Mat4 {
 pub fn rotate_obj(transformation: Mat4, angle: f32, mut axis: Vec3) -> Mat4 {
     let angle = -angle;
     let cos = angle.cos();
+    let one_cos = 1 - cos;
     let sin = angle.sin();
     axis.normalize_();
-    let temp = axis.scalar_mul(1. - cos);
+    let x = axis.x();
+    let y = axis.y();
+    let z = axis.z();
     let mut rotate_mat = Mat4::identity();
-    let mut column = Vec4::new(0.);
-    // first column
-    column.set_x(cos + temp.x() + axis.x());
-    column.set_y(temp.x() * axis.y() + sin * axis.z());
-    column.set_z(temp.x() * axis.z() - sin * axis.y());
-    column.set_w(0.);
-    rotate_mat._set_column(0, &column);
-    // second column
-    column.set_x(temp.y() * axis.x() - sin * axis.z());
-    column.set_y(cos + temp.y() * axis.y());
-    column.set_z(temp.y() * axis.z() + sin * axis.x());
-    column.set_w(0.);
-    rotate_mat._set_column(1, &column);
-    // third column
-    column.set_x(temp.z() * axis.x() + sin * axis.y());
-    column.set_y(temp.z() * axis.y() - sin * axis.x());
-    column.set_z(cos + temp.z() * axis.z());
-    column.set_w(0.);
-    rotate_mat._set_column(2, &column);
-
+    //first row
+    rotate_mat._set_entry(0, 0, cos + one_cos * x * x);
+    rotate_mat._set_entry(0, 1, one_cos * x * y - sin * z);
+    rotate_mat._set_entry(0, 2, one_cos * x * z + sin * y);
+    // second row
+    rotate_mat._set_entry(1, 0, one_cos * y * x + sin * z);
+    rotate_mat._set_entry(1, 1, cos + one_cos * y * y);
+    rotate_mat._set_entry(1, 2, one_cos * y * z - sin * x);
+    // third row
+    rotate_mat._set_entry(2, 0, one_cos * z * x - sin * y);
+    rotate_mat._set_entry(2, 1, one_cos * z * y + sin * x);
+    rotate_mat._set_entry(2, 2, cos + one_cos * z * z);
     return transformation.dot_mat(&rotate_mat);
 }
 
