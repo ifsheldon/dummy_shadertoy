@@ -141,6 +141,7 @@ pub fn add_cylinder(
 pub fn add_light(lights: &mut Vec<Light>, position: Vec3, ambient: Vec3, source: Vec3) {
     let l = Light {
         position,
+        original_position: position.clone(),
         ambient,
         diffuse: source,
     };
@@ -230,6 +231,7 @@ pub enum Mode {
     FreeMove,
     Zoom,
     Select,
+    MovingLight,
 }
 
 fn main() {
@@ -339,6 +341,26 @@ fn main() {
                     selected_obj_idx = -1;
                     switch_mode = true;
                 }
+                VirtualKeyCode::V => {
+                    mode = Mode::MovingLight;
+                    println!("Chose Mode: {:?}", mode);
+                    switch_mode = true;
+                }
+                _ => {}
+            }
+        }
+
+        if !switch_mode && state.received_keycode && mode == Mode::MovingLight {
+            let light = lights.get_mut(0).unwrap();
+            let light_pos = &mut light.position;
+            match state.keycode {
+                VirtualKeyCode::A => light_pos.set_x(light_pos.x() - 0.1),
+                VirtualKeyCode::D => light_pos.set_x(light_pos.x() + 0.1),
+                VirtualKeyCode::W => light_pos.set_z(light_pos.z() + 0.1),
+                VirtualKeyCode::S => light_pos.set_z(light_pos.z() - 0.1),
+                VirtualKeyCode::Q => light_pos.set_y(light_pos.y() + 0.1),
+                VirtualKeyCode::E => light_pos.set_y(light_pos.y() - 0.1),
+                VirtualKeyCode::R => *light_pos = light.original_position.clone(),
                 _ => {}
             }
         }

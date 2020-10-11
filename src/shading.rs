@@ -38,6 +38,7 @@ pub struct Material {
 #[derive(Copy, Clone)]
 pub struct Light {
     pub position: Vec3,
+    pub original_position: Vec3,
     pub ambient: Vec3,
     pub diffuse: Vec3,
 }
