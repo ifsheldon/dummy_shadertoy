@@ -386,13 +386,13 @@ fn main() {
                 VirtualKeyCode::W => {
                     phi -= (2.5_f32).to_radians();
                     if phi <= 0. {
-                        phi = 0.;
+                        phi = 0.01;
                     }
                 }
                 VirtualKeyCode::S => {
                     phi += (2.5_f32).to_radians();
                     if phi >= std::f32::consts::PI {
-                        phi = std::f32::consts::PI;
+                        phi = std::f32::consts::PI - 0.01;
                     }
                 }
                 VirtualKeyCode::R => {
