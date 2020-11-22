@@ -4,7 +4,7 @@
 // * Analytical formulas by Inigo Quilez, source: http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
 // * glm source code on https://github.com/g-truc/glm
 
-use crate::data::{Add, Length, Mat4, Minus, ScalarMul, Vec3, Vec4, _Mat};
+use crate::data::{Add, Length, Mat4, Minus, ScalarMul, Vec3, Vec4};
 use crate::shading::*;
 use crate::shapes::{
     sdf_cube, sdf_cylinder, sdf_ellipsoid, sdf_plane, sdf_rounded_cylinder, sdf_sphere,
@@ -14,8 +14,6 @@ use crate::transformations::*;
 use pixel_canvas::input::glutin::event::VirtualKeyCode;
 use pixel_canvas::{Canvas, Color};
 use rayon::prelude::*;
-use std::io::stdin;
-use std::process::exit;
 use std::time::Instant;
 
 mod data;
@@ -239,41 +237,9 @@ fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
     const SELECT_CIRCLE_RADIUS_SQUARE: i32 = 5 * 5;
-    let orthogonal_ray_dir_ec = Vec3::new_xyz(0., 0., 1.);
     let x_axis = Vec3::new_xyz(1., 0., 0.);
     let y_axis = Vec3::new_xyz(0., 1., 0.);
     let z_axis = Vec3::new_xyz(0., 0., 1.);
-    let use_perspective;
-    loop {
-        println!("Use Perspective? y for perspective view, n for orthogonal view");
-        let mut buf = String::new();
-        let result = stdin().read_line(&mut buf);
-        match result {
-            Ok(_) => {
-                if buf.len() <= 3 {
-                    let s = buf.to_lowercase();
-                    if s.contains("y") {
-                        use_perspective = true;
-                        println!("Using Perspective");
-                        break;
-                    } else if s.contains("n") {
-                        use_perspective = false;
-                        println!("Using Orthogonal");
-                        break;
-                    } else {
-                        eprintln!("Wrong Input, try again");
-                    }
-                } else {
-                    println!("Entered too many characters, try again");
-                }
-            }
-            Err(e) => {
-                eprintln!("Unexpected Error, exiting");
-                eprintln!("{}", e);
-                exit(-1);
-            }
-        }
-    }
 
     let mut objects = Vec::new();
     let mut lights = Vec::new();
@@ -285,7 +251,7 @@ fn main() {
     let eye_pos_original = eye_pos.clone();
     let mut center = Vec3::new(0.);
     let center_original = center.clone();
-    let mut up = Vec3::new_xyz(0.0, 1.0, 0.0);
+    let up = Vec3::new_xyz(0.0, 1.0, 0.0);
     let up_original = up.clone();
 
     let dw = VIEW_PLANE_WIDTH / WIDTH_F;
@@ -433,18 +399,7 @@ fn main() {
                 cursor_position.0, cursor_position.1
             );
             let frag_coord = [cursor_position.0 as f32, cursor_position.1 as f32];
-            let ray: Ray = if use_perspective {
-                get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord)
-            } else {
-                get_ray_orthogonal(
-                    dw,
-                    dh,
-                    &orthogonal_ray_dir_ec,
-                    &eye_pos,
-                    &look_at_mat,
-                    &frag_coord,
-                )
-            };
+            let ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
             let hit_object_idx = cast_hit_ray(&ray, &objects);
             match hit_object_idx {
                 Some((idx, hit_pos)) => {
@@ -645,18 +600,7 @@ fn main() {
                     return;
                 }
                 let frag_coord = [x as f32, y as f32];
-                let primary_ray: Ray = if use_perspective {
-                    get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord)
-                } else {
-                    get_ray_orthogonal(
-                        dw,
-                        dh,
-                        &orthogonal_ray_dir_ec,
-                        &eye_pos,
-                        &look_at_mat,
-                        &frag_coord,
-                    )
-                };
+                let primary_ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
                 *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
             });
         after = now.elapsed().as_millis();
