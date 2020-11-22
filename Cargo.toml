@@ -8,4 +8,4 @@ edition = "2018"
 
 [dependencies]
 pixel-canvas = "0.2.1"
-rayon = "1.4.1" # Thanks for the recommendation of Igor Sokolov
+rayon = "1.5"
