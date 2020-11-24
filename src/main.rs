@@ -9,9 +9,10 @@ use std::time::Instant;
 use num_traits::Pow;
 use pixel_canvas::{Canvas, Color};
 use pixel_canvas::input::glutin::event::VirtualKeyCode;
+use rand::prelude::*;
 use rayon::prelude::*;
 
-use crate::data::{Add, Length, Mat4, Minus, ScalarMul, Vec3, Vec4};
+use crate::data::{Add, Length, Mat4, Minus, ScalarDiv, ScalarMul, Vec3, Vec4};
 use crate::shading::*;
 use crate::shapes::{
     sdf_cube, sdf_cylinder, sdf_ellipsoid, sdf_plane, sdf_rounded_cylinder, sdf_sphere,
@@ -275,11 +276,27 @@ impl EMA
             self.pre
         };
     }
+
+    pub fn clear(&mut self)
+    {
+        self.pre = 0.0;
+        self.t = 0;
+    }
 }
 
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
+    const SUPER_SAMPLE_RATE: usize = 2; // super sample cost = super sample rate ^ 2
+    const SUPER_SAMPLE_RATE_F: f32 = SUPER_SAMPLE_RATE as f32;
+
+    let mut super_sample_indices = Vec::new();
+    for x in 0..SUPER_SAMPLE_RATE {
+        for y in 0..SUPER_SAMPLE_RATE
+        {
+            super_sample_indices.push((x, y));
+        }
+    }
 
     let mut objects = Vec::new();
     let mut lights = Vec::new();
@@ -289,6 +306,7 @@ fn main() {
 
     let mut eye_pos = Vec3::new_xyz(0.0, 0.0, -1.0);
     let mut eye_changed = true; //for the first frame
+    let mut super_sampled = false;
     let eye_pos_original = eye_pos.clone();
     let mut center = Vec3::new(0.);
     let center_original = center.clone();
@@ -451,27 +469,64 @@ fn main() {
             auto_moving_angle += angle_delta;
             eye_changed = true;
         }
-        frame_buffer_image
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(idx, pixel)| {
-                let pre_color = pixel.clone();
-                let y = idx / WIDTH;
-                let x = idx % WIDTH;
-                let frag_coord = [x as f32, y as f32];
-                if eye_changed
-                {
+        // multi-pass render
+        let mut rendered = false;
+        if eye_changed {
+            frame_buffer_image
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(idx, pixel)| {
+                    let y = idx / WIDTH;
+                    let x = idx % WIDTH;
+                    let frag_coord = [x as f32, y as f32];
                     let primary_ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
                     *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
-                } else {
+                });
+            super_sampled = false;
+            rendered = true;
+        } else if !super_sampled {
+            frame_buffer_image
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(idx, pixel)| {
+                    let y = idx / WIDTH;
+                    let x = idx % WIDTH;
+                    let grid_size = 1.0 / SUPER_SAMPLE_RATE_F;
                     // should shoot more rays
-                }
-            });
-        let after = now.elapsed().as_millis();
-        let t = after - before;
-        println!("Took {} ms to render one frame", t);
-        render_time_ema.add_stat(t as f32);
-        println!("Render time EMA = {}", render_time_ema.get());
+                    let rand_colors: Vec<Vec3> = super_sample_indices.par_iter().map(|idx| {
+                        let mut random_generator = rand::thread_rng();
+                        let grid_x = idx.0;
+                        let grid_y = idx.1;
+                        let grid_base_x = x as f32 + grid_x as f32 * grid_size;
+                        let grid_base_y = y as f32 + grid_y as f32 * grid_size;
+                        let rand_x = grid_base_x + random_generator.gen_range(0.0, grid_size);
+                        let rand_y = grid_base_y + random_generator.gen_range(0.0, grid_size);
+                        let frag_coord = [rand_x, rand_y];
+                        let rand_ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                        let color_f = shade(rand_ray, &objects, &materials, &lights);
+                        return color_f;
+                    }).collect();
+                    let mut color_sum = Vec3::new_rgb((pixel.r as f32) / 255.0, (pixel.g as f32) / 255.0, (pixel.b as f32) / 255.0);
+                    for c in rand_colors.iter()
+                    {
+                        color_sum.add_(c);
+                    }
+                    color_sum.scalar_div_((SUPER_SAMPLE_RATE * SUPER_SAMPLE_RATE + 1) as f32);
+                    *pixel = to_color(color_sum);
+                });
+            super_sampled = true;
+            rendered = true;
+        }else {
+            // do nothing
+        }
+        if rendered
+        {
+            let after = now.elapsed().as_millis();
+            let t = after - before;
+            println!("Took {} ms to render one frame", t);
+            render_time_ema.add_stat(t as f32);
+            println!("Render time EMA = {}", render_time_ema.get());
+        }
         state.reset_flags();
         eye_changed = false;
     });
