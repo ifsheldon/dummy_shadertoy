@@ -4,6 +4,12 @@
 // * Analytical formulas by Inigo Quilez, source: http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
 // * glm source code on https://github.com/g-truc/glm
 
+use std::time::Instant;
+
+use pixel_canvas::{Canvas, Color};
+use pixel_canvas::input::glutin::event::VirtualKeyCode;
+use rayon::prelude::*;
+
 use crate::data::{Add, Length, Mat4, Minus, ScalarMul, Vec3, Vec4};
 use crate::shading::*;
 use crate::shapes::{
@@ -11,10 +17,6 @@ use crate::shapes::{
 };
 use crate::state::KeyboardMouseStates;
 use crate::transformations::*;
-use pixel_canvas::input::glutin::event::VirtualKeyCode;
-use pixel_canvas::{Canvas, Color};
-use rayon::prelude::*;
-use std::time::Instant;
 
 mod data;
 mod err;
@@ -225,10 +227,8 @@ pub fn cast_hit_ray(ray: &Ray, objects: &Vec<Object>) -> Option<(i32, Vec3)> {
 #[derive(PartialEq, Debug)]
 pub enum Mode {
     Orbit,
-    Panning,
     FreeMove,
     Zoom,
-    Select,
     MovingLight,
     AutoMoveCam,
 }
@@ -236,10 +236,6 @@ pub enum Mode {
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
-    const SELECT_CIRCLE_RADIUS_SQUARE: i32 = 5 * 5;
-    let x_axis = Vec3::new_xyz(1., 0., 0.);
-    let y_axis = Vec3::new_xyz(0., 1., 0.);
-    let z_axis = Vec3::new_xyz(0., 0., 1.);
 
     let mut objects = Vec::new();
     let mut lights = Vec::new();
@@ -248,11 +244,11 @@ fn main() {
     let fov_radian = (2.0_f32).atan() * 2.;
 
     let mut eye_pos = Vec3::new_xyz(0.0, 0.0, -1.0);
+    let mut eye_changed = true; //for the first frame
     let eye_pos_original = eye_pos.clone();
     let mut center = Vec3::new(0.);
     let center_original = center.clone();
     let up = Vec3::new_xyz(0.0, 1.0, 0.0);
-    let up_original = up.clone();
 
     let dw = VIEW_PLANE_WIDTH / WIDTH_F;
     let dh = VIEW_PLANE_HEIGHT / HEIGHT_F;
@@ -263,8 +259,6 @@ fn main() {
         .title("Dynamic Raytracer")
         .state(KeyboardMouseStates::new())
         .input(KeyboardMouseStates::handle_input);
-    let mut before = now.elapsed().as_millis();
-    let mut after = before;
     let mut render_time_ema = 0.;
     let ema_alpha = 0.95;
     let ema_beta = 1. - ema_alpha;
@@ -274,24 +268,18 @@ fn main() {
     let mut theta: f32 = 0.; // wc the angle between -z and +x
     let mut phi: f32 = std::f32::consts::FRAC_PI_2; // wc complement angle of the angle between the line and z-x plane
 
-    let mut selected_obj_idx: i32 = -1;
     let mut auto_moving_angle: f32 = 0.;
     let angle_delta = (2.5_f32).to_radians();
 
     // render up to 60fps
     canvas.render(move |state, frame_buffer_image| {
-        before = now.elapsed().as_millis();
+        let before = now.elapsed().as_millis();
         // switching modes
         let mut switching_mode = false;
         if state.received_keycode {
             match state.keycode {
                 VirtualKeyCode::Key1 => {
                     mode = Mode::Orbit;
-                    println!("Chose Mode: {:?}", mode);
-                    switching_mode = true;
-                }
-                VirtualKeyCode::Key2 => {
-                    mode = Mode::Panning;
                     println!("Chose Mode: {:?}", mode);
                     switching_mode = true;
                 }
@@ -310,13 +298,7 @@ fn main() {
                     println!("Chose Mode: {:?}", mode);
                     switching_mode = true
                 }
-                VirtualKeyCode::X => {
-                    mode = Mode::Select;
-                    println!("Chose Mode: {:?}", mode);
-                    switching_mode = true
-                }
                 VirtualKeyCode::C => {
-                    selected_obj_idx = -1;
                     switching_mode = true;
                 }
                 VirtualKeyCode::V => {
@@ -347,17 +329,27 @@ fn main() {
             println!("Key Pressed: {:?}", state.keycode);
             match state.keycode {
                 // for orbiting around the origin
-                VirtualKeyCode::A => theta += (5.0_f32).to_radians(),
-                VirtualKeyCode::D => theta -= (5.0_f32).to_radians(),
+                VirtualKeyCode::A => {
+                    theta += (5.0_f32).to_radians();
+                    eye_changed = true
+                }
+                VirtualKeyCode::D => {
+                    theta -= (5.0_f32).to_radians();
+                    eye_changed = true
+                }
                 VirtualKeyCode::W => {
                     phi -= (2.5_f32).to_radians();
+                    eye_changed = true;
                     if phi <= 0. {
                         phi = 0.01;
+                        eye_changed = false;
                     }
                 }
                 VirtualKeyCode::S => {
                     phi += (2.5_f32).to_radians();
+                    eye_changed = true;
                     if phi >= std::f32::consts::PI {
+                        eye_changed = false;
                         phi = std::f32::consts::PI - 0.01;
                     }
                 }
@@ -365,8 +357,9 @@ fn main() {
                     theta = 0.;
                     phi = std::f32::consts::FRAC_PI_2;
                     center = center_original.clone();
+                    eye_changed = true;
                 }
-                _ => {}
+                _ => eye_changed = false
             }
             let radius = eye_pos._minus(&center).get_length();
             eye_pos.set_y(phi.cos() * radius);
@@ -390,188 +383,21 @@ fn main() {
             }
         }
         let look_at_mat = look_at(&eye_pos, &center, &up);
-        // bottom-left(0,0) top-right(w, h)
-        let cursor_position = (state.x as i32, state.y as i32);
-        // selecting object
-        if state.received_mouse_press {
-            println!(
-                "Mouse Pressed at ({}, {})",
-                cursor_position.0, cursor_position.1
-            );
-            let frag_coord = [cursor_position.0 as f32, cursor_position.1 as f32];
-            let ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
-            let hit_object_idx = cast_hit_ray(&ray, &objects);
-            match hit_object_idx {
-                Some((idx, hit_pos)) => {
-                    let obj: &Object = objects.get(idx as usize).unwrap();
-                    match mode {
-                        Mode::Zoom => {
-                            println!(
-                                "Focused on hit position ({}, {}, {})",
-                                hit_pos.x(),
-                                hit_pos.y(),
-                                hit_pos.z()
-                            );
-                            center = hit_pos.clone();
-                            // may need to adjust parameter according to camera move mode?
-                            // unimplemented!()
-                        }
-                        Mode::Select => {
-                            println!("Selected Object(idx={}, type={:?})", idx, obj.shape,);
-                            selected_obj_idx = idx;
-                        }
-                        _ => println!(
-                            "Mouse Pressed at ({}, {})",
-                            cursor_position.0, cursor_position.1
-                        ),
-                    }
-                }
-                None => {}
-            }
-        }
-
-        let mut rotating_or_scaling = false;
-        if !switching_mode && state.received_keycode && selected_obj_idx != -1 {
-            let obj = objects.get_mut(selected_obj_idx as usize).unwrap();
-            let identity = Mat4::identity();
-            match state.keycode {
-                // Rotate around x
-                VirtualKeyCode::I => {
-                    let rotate = rotate_obj(identity, (5.0_f32).to_radians(), x_axis.clone());
-                    let new_transformation = rotate.dot_mat(&obj.transformation);
-                    obj.transformation = new_transformation;
-                    rotating_or_scaling = true;
-                }
-                VirtualKeyCode::K => {
-                    let rotate = rotate_obj(identity, (-5.0_f32).to_radians(), x_axis.clone());
-                    let new_transformation = rotate.dot_mat(&obj.transformation);
-                    obj.transformation = new_transformation;
-                    rotating_or_scaling = true;
-                }
-                // Rotate around y
-                VirtualKeyCode::J => {
-                    let rotate = rotate_obj(identity, (5.0_f32).to_radians(), y_axis.clone());
-                    let new_transformation = rotate.dot_mat(&obj.transformation);
-                    obj.transformation = new_transformation;
-                    rotating_or_scaling = true;
-                }
-                VirtualKeyCode::L => {
-                    let rotate = rotate_obj(identity, (-5.0_f32).to_radians(), y_axis.clone());
-                    let new_transformation = rotate.dot_mat(&obj.transformation);
-                    obj.transformation = new_transformation;
-                    rotating_or_scaling = true;
-                }
-                // Rotate around z
-                VirtualKeyCode::U => {
-                    let rotate = rotate_obj(identity, (5.0_f32).to_radians(), z_axis.clone());
-                    let new_transformation = rotate.dot_mat(&obj.transformation);
-                    obj.transformation = new_transformation;
-                    rotating_or_scaling = true;
-                }
-                VirtualKeyCode::O => {
-                    let rotate = rotate_obj(identity, (-5.0_f32).to_radians(), z_axis.clone());
-                    let new_transformation = rotate.dot_mat(&obj.transformation);
-                    obj.transformation = new_transformation;
-                    rotating_or_scaling = true;
-                }
-                // Scale
-                VirtualKeyCode::PageUp => {
-                    obj.transformation = scale(&obj.transformation, 1.1);
-                    rotating_or_scaling = true;
-                }
-                VirtualKeyCode::PageDown => {
-                    obj.transformation = scale(&obj.transformation, 0.85);
-                    rotating_or_scaling = true;
-                }
-                // reset
-                VirtualKeyCode::M => {
-                    obj.transformation = obj.original_transformation.clone();
-                    rotating_or_scaling = true;
-                }
-                _ => {}
-            }
-        }
         // zooming
-        if !rotating_or_scaling && !switching_mode && state.received_keycode && mode == Mode::Zoom {
+        if !switching_mode && state.received_keycode && mode == Mode::Zoom {
             let mut camera_focus_direction = look_at_mat._get_column(2);
             match state.keycode {
                 VirtualKeyCode::Q => {
                     camera_focus_direction.scalar_mul_(0.1);
                     eye_pos.add_(&camera_focus_direction);
+                    eye_changed = true;
                 }
                 VirtualKeyCode::E => {
                     camera_focus_direction.scalar_mul_(0.1);
                     eye_pos.minus_(&camera_focus_direction);
+                    eye_changed = true;
                 }
-                _ => {}
-            }
-        }
-        // panning camera or the selected object
-        if !rotating_or_scaling && !switching_mode && state.received_keycode && mode == Mode::Panning {
-            let mut camera_up = look_at_mat._get_column(1);
-            let mut camera_right = look_at_mat._get_column(0);
-            if selected_obj_idx != -1 {
-                let obj = objects.get_mut(selected_obj_idx as usize).unwrap();
-                match state.keycode {
-                    // for panning
-                    VirtualKeyCode::W => {
-                        camera_up.scalar_mul_(0.1);
-                        let new_transformation =
-                            translate_obj(obj.transformation.clone(), &camera_up);
-                        obj.transformation = new_transformation;
-                    }
-                    VirtualKeyCode::S => {
-                        camera_up.scalar_mul_(-0.1);
-                        let new_transformation =
-                            translate_obj(obj.transformation.clone(), &camera_up);
-                        obj.transformation = new_transformation;
-                    }
-                    VirtualKeyCode::A => {
-                        camera_right.scalar_mul_(-0.1);
-                        let new_transformation =
-                            translate_obj(obj.transformation.clone(), &camera_right);
-                        obj.transformation = new_transformation;
-                    }
-                    VirtualKeyCode::D => {
-                        camera_right.scalar_mul_(0.1);
-                        let new_transformation =
-                            translate_obj(obj.transformation.clone(), &camera_right);
-                        obj.transformation = new_transformation;
-                    }
-                    VirtualKeyCode::R => {
-                        obj.transformation = obj.original_transformation.clone();
-                    }
-                    _ => {}
-                }
-            } else {
-                match state.keycode {
-                    // for panning
-                    VirtualKeyCode::W => {
-                        camera_up.scalar_mul_(0.1);
-                        eye_pos.add_(&camera_up);
-                        center.add_(&camera_up);
-                    }
-                    VirtualKeyCode::S => {
-                        camera_up.scalar_mul_(0.1);
-                        eye_pos.minus_(&camera_up);
-                        center.minus_(&camera_up);
-                    }
-                    VirtualKeyCode::A => {
-                        camera_right.scalar_mul_(0.1);
-                        eye_pos.minus_(&camera_right);
-                        center.minus_(&camera_right);
-                    }
-                    VirtualKeyCode::D => {
-                        camera_right.scalar_mul_(0.1);
-                        eye_pos.add_(&camera_right);
-                        center.add_(&camera_right);
-                    }
-                    VirtualKeyCode::R => {
-                        eye_pos = eye_pos_original.clone();
-                        center = center_original.clone();
-                    }
-                    _ => {}
-                }
+                _ => eye_changed = false
             }
         }
         // for automatic moving the camera
@@ -580,35 +406,31 @@ fn main() {
             eye_pos.set_z(-auto_moving_angle.cos());
             eye_pos.set_y(0.);
             auto_moving_angle += angle_delta;
+            eye_changed = true;
         }
         frame_buffer_image
             .par_iter_mut()
             .enumerate()
             .for_each(|(idx, pixel)| {
+                let pre_color = pixel.clone();
                 let y = idx / WIDTH;
                 let x = idx % WIDTH;
-                let dx = x as i32 - cursor_position.0;
-                let dy = y as i32 - cursor_position.1;
-                let dist = dx * dx + dy * dy;
-                let in_circle = dist < SELECT_CIRCLE_RADIUS_SQUARE;
-                if in_circle {
-                    *pixel = Color {
-                        r: 255,
-                        g: 255,
-                        b: 255,
-                    };
-                    return;
-                }
                 let frag_coord = [x as f32, y as f32];
-                let primary_ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
-                *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
+                if eye_changed
+                {
+                    let primary_ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                    *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
+                }else {
+                    // should shoot more rays
+                }
             });
-        after = now.elapsed().as_millis();
+        let after = now.elapsed().as_millis();
         let t = after - before;
         println!("Took {} ms to render one frame", t);
         render_time_ema = ema_alpha * render_time_ema + ema_beta * (t as f32);
         println!("Render time EMA = {}", render_time_ema);
         state.reset_flags();
+        eye_changed = false;
     });
 }
 
