@@ -468,8 +468,9 @@ fn main() {
                 }
             });
         let after = now.elapsed().as_millis();
+        let t = after - before;
         println!("Took {} ms to render one frame", t);
-        render_time_ema.add_stat((after - before) as f32);
+        render_time_ema.add_stat(t as f32);
         println!("Render time EMA = {}", render_time_ema.get());
         state.reset_flags();
         eye_changed = false;
@@ -502,4 +503,22 @@ fn clamp_float(x: f32) -> f32 {
         return 1.;
     }
     x
+}
+
+#[cfg(test)]
+mod test
+{
+    use super::*;
+
+    #[test]
+    fn test_EMA()
+    {
+        let series = [1.0, 1.0, 2.0, 3.0, 2.0, 1.0, 4.0, 5.0, 6.0, 8.0];
+        let mut ema = EMA::new(0.99, true);
+        for i in series.iter()
+        {
+            ema.add_stat(*i);
+            println!("{}", ema.get());
+        }
+    }
 }
