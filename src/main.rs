@@ -6,6 +6,7 @@
 
 use std::time::Instant;
 
+use num_traits::Pow;
 use pixel_canvas::{Canvas, Color};
 use pixel_canvas::input::glutin::event::VirtualKeyCode;
 use rayon::prelude::*;
@@ -233,6 +234,49 @@ pub enum Mode {
     AutoMoveCam,
 }
 
+pub struct EMA
+{
+    pre: f32,
+    alpha: f32,
+    beta: f32,
+    enable_correction: bool,
+    t: u8,
+}
+
+impl EMA
+{
+    pub fn new(alpha: f32, enable_correction: bool) -> Self
+    {
+        EMA {
+            pre: 0.0,
+            alpha,
+            beta: 1.0 - alpha,
+            enable_correction,
+            t: 0,
+        }
+    }
+
+    pub fn set_alpha(&mut self, alpha: f32)
+    {
+        self.alpha = alpha;
+        self.beta = 1.0 - alpha;
+    }
+    pub fn add_stat(&mut self, v: f32)
+    {
+        self.pre = self.alpha * self.pre + self.beta * v;
+        self.t += 1;
+    }
+    pub fn get(&self) -> f32
+    {
+        return if self.enable_correction && self.t != 0 && self.t < 200
+        {
+            self.pre / (1.0 - self.alpha.pow(self.t))
+        } else {
+            self.pre
+        };
+    }
+}
+
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
@@ -259,9 +303,8 @@ fn main() {
         .title("Dynamic Raytracer")
         .state(KeyboardMouseStates::new())
         .input(KeyboardMouseStates::handle_input);
-    let mut render_time_ema = 0.;
-    let ema_alpha = 0.95;
-    let ema_beta = 1. - ema_alpha;
+
+    let mut render_time_ema = EMA::new(0.95, false);
 
     let mut mode = Mode::Orbit;
 
@@ -420,15 +463,14 @@ fn main() {
                 {
                     let primary_ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
                     *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
-                }else {
+                } else {
                     // should shoot more rays
                 }
             });
         let after = now.elapsed().as_millis();
-        let t = after - before;
         println!("Took {} ms to render one frame", t);
-        render_time_ema = ema_alpha * render_time_ema + ema_beta * (t as f32);
-        println!("Render time EMA = {}", render_time_ema);
+        render_time_ema.add_stat((after - before) as f32);
+        println!("Render time EMA = {}", render_time_ema.get());
         state.reset_flags();
         eye_changed = false;
     });
