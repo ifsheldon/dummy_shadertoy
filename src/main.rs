@@ -7,8 +7,8 @@
 use std::time::Instant;
 
 use num_traits::Pow;
-use pixel_canvas::{Canvas, Color};
 use pixel_canvas::input::glutin::event::VirtualKeyCode;
+use pixel_canvas::{Canvas, Color};
 use rand::prelude::*;
 use rayon::prelude::*;
 
@@ -235,8 +235,7 @@ pub enum Mode {
     AutoMoveCam,
 }
 
-pub struct EMA
-{
+pub struct EMA {
     pre: f32,
     alpha: f32,
     beta: f32,
@@ -244,10 +243,8 @@ pub struct EMA
     t: u8,
 }
 
-impl EMA
-{
-    pub fn new(alpha: f32, enable_correction: bool) -> Self
-    {
+impl EMA {
+    pub fn new(alpha: f32, enable_correction: bool) -> Self {
         EMA {
             pre: 0.0,
             alpha,
@@ -257,28 +254,23 @@ impl EMA
         }
     }
 
-    pub fn set_alpha(&mut self, alpha: f32)
-    {
+    pub fn set_alpha(&mut self, alpha: f32) {
         self.alpha = alpha;
         self.beta = 1.0 - alpha;
     }
-    pub fn add_stat(&mut self, v: f32)
-    {
+    pub fn add_stat(&mut self, v: f32) {
         self.pre = self.alpha * self.pre + self.beta * v;
         self.t += 1;
     }
-    pub fn get(&self) -> f32
-    {
-        return if self.enable_correction && self.t != 0 && self.t < 200
-        {
+    pub fn get(&self) -> f32 {
+        return if self.enable_correction && self.t != 0 && self.t < 200 {
             self.pre / (1.0 - self.alpha.pow(self.t))
         } else {
             self.pre
         };
     }
 
-    pub fn clear(&mut self)
-    {
+    pub fn clear(&mut self) {
         self.pre = 0.0;
         self.t = 0;
     }
@@ -292,8 +284,7 @@ fn main() {
 
     let mut super_sample_indices = Vec::new();
     for x in 0..SUPER_SAMPLE_RATE {
-        for y in 0..SUPER_SAMPLE_RATE
-        {
+        for y in 0..SUPER_SAMPLE_RATE {
             super_sample_indices.push((x, y));
         }
     }
@@ -337,13 +328,12 @@ fn main() {
     canvas.render(move |state, frame_buffer_image| {
         let before = now.elapsed().as_millis();
         // switching modes
-        let mut switching_mode = false;
+        let mut switching_mode = true;
         if state.received_keycode {
             match state.keycode {
-                VirtualKeyCode::Add => {
+                VirtualKeyCode::Equals => {
                     enable_super_sample = !enable_super_sample;
-                    if enable_super_sample
-                    {
+                    if enable_super_sample {
                         println!("Enable Super Sample");
                     } else {
                         println!("Disabled Super Sample");
@@ -353,32 +343,24 @@ fn main() {
                 VirtualKeyCode::Key1 => {
                     mode = Mode::Orbit;
                     println!("Chose Mode: {:?}", mode);
-                    switching_mode = true;
                 }
                 VirtualKeyCode::Key3 => {
                     mode = Mode::FreeMove;
                     println!("Chose Mode: {:?}", mode);
-                    switching_mode = true
                 }
                 VirtualKeyCode::Key4 => {
                     mode = Mode::AutoMoveCam;
                     println!("Chose Mode: {:?}", mode);
-                    switching_mode = true;
                 }
                 VirtualKeyCode::Z => {
                     mode = Mode::Zoom;
                     println!("Chose Mode: {:?}", mode);
-                    switching_mode = true
-                }
-                VirtualKeyCode::C => {
-                    switching_mode = true;
                 }
                 VirtualKeyCode::V => {
                     mode = Mode::MovingLight;
                     println!("Chose Mode: {:?}", mode);
-                    switching_mode = true;
                 }
-                _ => {}
+                _ => switching_mode = false,
             }
         }
         // moving the light
@@ -431,7 +413,7 @@ fn main() {
                     center = center_original.clone();
                     eye_changed = true;
                 }
-                _ => eye_changed = false
+                _ => eye_changed = false,
             }
             let radius = eye_pos._minus(&center).get_length();
             eye_pos.set_y(phi.cos() * radius);
@@ -469,7 +451,7 @@ fn main() {
                     eye_pos.minus_(&camera_focus_direction);
                     eye_changed = true;
                 }
-                _ => eye_changed = false
+                _ => eye_changed = false,
             }
         }
         // for automatic moving the camera
@@ -490,7 +472,8 @@ fn main() {
                     let y = idx / WIDTH;
                     let x = idx % WIDTH;
                     let frag_coord = [x as f32, y as f32];
-                    let primary_ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                    let primary_ray =
+                        get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
                     *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
                 });
             super_sampled = false;
@@ -504,22 +487,33 @@ fn main() {
                     let x = idx % WIDTH;
                     let grid_size = 1.0 / SUPER_SAMPLE_RATE_F;
                     // should shoot more rays
-                    let rand_colors: Vec<Vec3> = super_sample_indices.par_iter().map(|idx| {
-                        let mut random_generator = rand::thread_rng();
-                        let grid_x = idx.0;
-                        let grid_y = idx.1;
-                        let grid_base_x = x as f32 + grid_x as f32 * grid_size;
-                        let grid_base_y = y as f32 + grid_y as f32 * grid_size;
-                        let rand_x = grid_base_x + random_generator.gen_range(0.0, grid_size);
-                        let rand_y = grid_base_y + random_generator.gen_range(0.0, grid_size);
-                        let frag_coord = [rand_x, rand_y];
-                        let rand_ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
-                        let color_f = shade(rand_ray, &objects, &materials, &lights);
-                        return color_f;
-                    }).collect();
-                    let mut color_sum = Vec3::new_rgb((pixel.r as f32) / 255.0, (pixel.g as f32) / 255.0, (pixel.b as f32) / 255.0);
-                    for c in rand_colors.iter()
-                    {
+                    let rand_colors: Vec<Vec3> = super_sample_indices
+                        .par_iter()
+                        .map(|idx| {
+                            let mut random_generator = rand::thread_rng();
+                            let grid_x = idx.0;
+                            let grid_y = idx.1;
+                            let grid_base_x = x as f32 + grid_x as f32 * grid_size;
+                            let grid_base_y = y as f32 + grid_y as f32 * grid_size;
+                            let rand_x = grid_base_x + random_generator.gen_range(0.0, grid_size);
+                            let rand_y = grid_base_y + random_generator.gen_range(0.0, grid_size);
+                            let frag_coord = [rand_x, rand_y];
+                            let rand_ray = get_ray_perspective(
+                                fov_radian,
+                                &look_at_mat,
+                                &eye_pos,
+                                &frag_coord,
+                            );
+                            let color_f = shade(rand_ray, &objects, &materials, &lights);
+                            return color_f;
+                        })
+                        .collect();
+                    let mut color_sum = Vec3::new_rgb(
+                        (pixel.r as f32) / 255.0,
+                        (pixel.g as f32) / 255.0,
+                        (pixel.b as f32) / 255.0,
+                    );
+                    for c in rand_colors.iter() {
                         color_sum.add_(c);
                     }
                     color_sum.scalar_div_((SUPER_SAMPLE_RATE * SUPER_SAMPLE_RATE + 1) as f32);
@@ -530,12 +524,14 @@ fn main() {
         } else {
             // do nothing
         }
-        if rendered
-        {
+        if rendered {
             let after = now.elapsed().as_millis();
             let t = after - before;
             if super_sampled {
-                println!("Took {} ms to super-sample one frame, super-sample rate = {}X", t, SUPER_SAMPLE_RATE);
+                println!(
+                    "Took {} ms to super-sample one frame, super-sample rate = {}X",
+                    t, SUPER_SAMPLE_RATE
+                );
             } else {
                 println!("Took {} ms to render one frame", t);
             }
@@ -576,17 +572,14 @@ fn clamp_float(x: f32) -> f32 {
 }
 
 #[cfg(test)]
-mod test
-{
+mod test {
     use super::*;
 
     #[test]
-    fn test_EMA()
-    {
+    fn test_EMA() {
         let series = [1.0, 1.0, 2.0, 3.0, 2.0, 1.0, 4.0, 5.0, 6.0, 8.0];
         let mut ema = EMA::new(0.99, true);
-        for i in series.iter()
-        {
+        for i in series.iter() {
             ema.add_stat(*i);
             println!("{}", ema.get());
         }
