@@ -332,12 +332,13 @@ fn main() {
         if state.received_keycode {
             match state.keycode {
                 VirtualKeyCode::Equals => {
-                    enable_super_sample = !enable_super_sample;
-                    if enable_super_sample {
-                        println!("Enable Super Sample");
-                    } else {
-                        println!("Disabled Super Sample");
-                    }
+                    enable_super_sample = true;
+                    println!("Enable Super Sample");
+                    eye_changed = true;
+                }
+                VirtualKeyCode::Subtract => {
+                    enable_super_sample = false;
+                    println!("Disabled Super Sample");
                     eye_changed = true;
                 }
                 VirtualKeyCode::Key1 => {
