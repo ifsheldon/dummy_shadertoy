@@ -307,6 +307,7 @@ fn main() {
     let mut eye_pos = Vec3::new_xyz(0.0, 0.0, -1.0);
     let mut eye_changed = true; //for the first frame
     let mut super_sampled = false;
+    let mut enable_super_sample = true;
     let eye_pos_original = eye_pos.clone();
     let mut center = Vec3::new(0.);
     let center_original = center.clone();
@@ -339,6 +340,16 @@ fn main() {
         let mut switching_mode = false;
         if state.received_keycode {
             match state.keycode {
+                VirtualKeyCode::Add => {
+                    enable_super_sample = !enable_super_sample;
+                    if enable_super_sample
+                    {
+                        println!("Enable Super Sample");
+                    } else {
+                        println!("Disabled Super Sample");
+                    }
+                    eye_changed = true;
+                }
                 VirtualKeyCode::Key1 => {
                     mode = Mode::Orbit;
                     println!("Chose Mode: {:?}", mode);
@@ -484,7 +495,7 @@ fn main() {
                 });
             super_sampled = false;
             rendered = true;
-        } else if !super_sampled {
+        } else if enable_super_sample && !super_sampled {
             frame_buffer_image
                 .par_iter_mut()
                 .enumerate()
@@ -516,14 +527,18 @@ fn main() {
                 });
             super_sampled = true;
             rendered = true;
-        }else {
+        } else {
             // do nothing
         }
         if rendered
         {
             let after = now.elapsed().as_millis();
             let t = after - before;
-            println!("Took {} ms to render one frame", t);
+            if super_sampled {
+                println!("Took {} ms to super-sample one frame, super-sample rate = {}X", t, SUPER_SAMPLE_RATE);
+            } else {
+                println!("Took {} ms to render one frame", t);
+            }
             render_time_ema.add_stat(t as f32);
             println!("Render time EMA = {}", render_time_ema.get());
         }
