@@ -310,9 +310,6 @@ fn main() {
     let center_original = center.clone();
     let up = Vec3::new_xyz(0.0, 1.0, 0.0);
 
-    let dw = VIEW_PLANE_WIDTH / WIDTH_F;
-    let dh = VIEW_PLANE_HEIGHT / HEIGHT_F;
-
     let now = Instant::now();
     // configure the window/canvas
     let canvas = Canvas::new(WIDTH, HEIGHT)
