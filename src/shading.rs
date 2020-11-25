@@ -46,6 +46,20 @@ pub struct Light {
     pub r: f32,
 }
 
+fn get_jittered_pos(pos: &Vec3, right: &Vec3, up: &Vec3, width: f32, height: f32) -> Vec3
+{
+    let mut random = rand::thread_rng();
+    let mut x = random.gen::<f32>() * 2.0 - 1.0;
+    let mut y = random.gen::<f32>() * 2.0 - 1.0;
+    x *= (width / 2.0);
+    y *= (height / 2.0);
+    let r = right.scalar_mul(x);
+    let u = up.scalar_mul(y);
+    let mut p = pos._add(&r);
+    p.add_(&u);
+    return p;
+}
+
 fn get_jittered_light_pos(light: &Light, pos: &Vec3) -> Vec3
 {
     let light_basis = look_at(&light.position, pos, &Vec3::new_xyz(0., 0.0, 1.0));
@@ -142,9 +156,7 @@ pub fn shortest_dist_to_surface(
     return (objects.len() as i32, MAX_DIST);
 }
 
-pub fn look_at(eye: &Vec3, center: &Vec3, up: &Vec3) -> Mat3 {
-    let mut look_at_direction = center._minus(eye);
-    look_at_direction.normalize_();
+fn _look_at(look_at_direction: &Vec3, up: &Vec3) -> Mat3 {
     let mut right = look_at_direction.cross(up);
     right.normalize_();
     let mut camera_up = right.cross(&look_at_direction);
@@ -157,6 +169,12 @@ pub fn look_at(eye: &Vec3, center: &Vec3, up: &Vec3) -> Mat3 {
     m._set_column(2, &f);
 
     return m;
+}
+
+pub fn look_at(eye: &Vec3, center: &Vec3, up: &Vec3) -> Mat3 {
+    let mut look_at_direction = center._minus(eye);
+    look_at_direction.normalize_();
+    return _look_at(&look_at_direction, up);
 }
 
 #[inline]
@@ -324,36 +342,77 @@ pub fn get_ray_orthogonal(
     }
 }
 
+const GLOSSY_LIGHT_NUM: usize = 3;
+const JITTER_DIM: f32 = 0.01;
+
 pub fn shade(
     primary_ray: Ray,
     objects: &Vec<Object>,
     materials: &Vec<Material>,
     lights: &Vec<Light>,
     enable_soft_shadow: bool,
+    enable_glossy: bool,
 ) -> Vec3 {
     let eps = Vec3::new(EPSILON);
     let mut next_ray = primary_ray.clone();
     let mut color_result = Vec3::new(0.);
     let mut component_k_rg = Vec3::new(1.);
     let mut pre_obj = -1;
-    for _level in 0..NUM_ITERATIONS {
+    let UP = Vec3::new_xyz(0.0, 0.0, 1.0);
+    for level in 0..NUM_ITERATIONS {
         let mut has_hit = false;
         let mut hit_pos = Vec3::_new();
         let mut hit_normal = Vec3::_new();
         let mut k_rg = Vec3::new(1.);
-        let color_local = cast_ray(
-            &next_ray,
-            pre_obj,
-            lights,
-            materials,
-            objects,
-            &mut has_hit,
-            &mut hit_pos,
-            &mut hit_normal,
-            &mut k_rg,
-            &mut pre_obj,
-            enable_soft_shadow,
-        );
+        let color_local =
+            if enable_glossy && level != 0 {
+                let ray_basis = _look_at(&next_ray.direction, &UP);
+                let mut ray_up = ray_basis._get_column(1);
+                let mut ray_right = ray_basis._get_column(0);
+                let mut base_point = next_ray.direction.scalar_mul(1.0);
+                base_point.add_(&next_ray.origin);
+                let glossy_colors: Vec<Vec3> = (0..GLOSSY_LIGHT_NUM).into_iter().map(|_| {
+                    let jitter_point = get_jittered_pos(&base_point, &ray_right, &ray_up, 0.001, 0.001);
+                    let mut dir = jitter_point._minus(&next_ray.direction);
+                    dir.normalize_();
+                    let glossy_ray = Ray { direction: dir, origin: next_ray.origin.clone() };
+                    let mut temp1 = Vec3::new(0.0);
+                    let mut temp2 = temp1.clone();
+                    let mut temp3 = temp1.clone();
+                    let color = cast_ray(&glossy_ray, pre_obj, lights, materials, objects, &mut false, &mut temp1, &mut temp2, &mut temp3, &mut 0, false);
+                    return color;
+                }).collect();
+                let mut color = cast_ray(
+                    &next_ray,
+                    pre_obj,
+                    lights,
+                    materials,
+                    objects,
+                    &mut has_hit,
+                    &mut hit_pos,
+                    &mut hit_normal,
+                    &mut k_rg,
+                    &mut pre_obj,
+                    enable_soft_shadow,
+                );
+                glossy_colors.iter().for_each(|c| color.add_(c));
+                color.scalar_div_((GLOSSY_LIGHT_NUM + 1) as f32);
+                color
+            } else {
+                cast_ray(
+                    &next_ray,
+                    pre_obj,
+                    lights,
+                    materials,
+                    objects,
+                    &mut has_hit,
+                    &mut hit_pos,
+                    &mut hit_normal,
+                    &mut k_rg,
+                    &mut pre_obj,
+                    enable_soft_shadow,
+                )
+            };
         color_result.add_(&component_k_rg.product(&color_local));
         if !has_hit {
             break;
