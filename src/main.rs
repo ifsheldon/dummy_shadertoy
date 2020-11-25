@@ -8,9 +8,9 @@ use std::ops::{Index, IndexMut};
 use std::time::Instant;
 
 use num_traits::Pow;
+use pixel_canvas::{Canvas, Color, XY};
 use pixel_canvas::input::glutin::event::VirtualKeyCode;
 use pixel_canvas::input::glutin::event::VirtualKeyCode::W;
-use pixel_canvas::{Canvas, Color, XY};
 use rand::prelude::*;
 use rayon::prelude::*;
 
@@ -33,7 +33,7 @@ const EPSILON: f32 = 0.0001;
 const MIN_DIST: f32 = 0.0;
 const MAX_DIST: f32 = 100.0;
 const MAX_MARCHING_STEPS: i32 = 255;
-const NUM_ITERATIONS: i32 = 3;
+const NUM_ITERATIONS: i32 = 2;
 const BACKGROUND_COLOR: (f32, f32, f32) = (0.4, 0.4, 0.4);
 const WIDTH: usize = 640;
 const WIDTH_F: f32 = WIDTH as f32;
@@ -327,7 +327,6 @@ impl Pixel {
 }
 
 //TODO: Implement soft shadows using distribution ray tracing
-//TODO: Implement motion blur using distribution ray tracing
 //TODO: Implement depth of field effect using distribution ray tracing
 //TODO: Implement glossy reflection using distribution ray tracing
 //TODO: Implement environment mapping using spherical projection (15 points) or cube-mapping (25 points)
@@ -355,6 +354,8 @@ fn main() {
     let mut eye_changed = true; //for the first frame
     let mut super_sampled = false;
     let mut enable_super_sample = true;
+    let mut enable_motion_blur = false;
+    let mut clear_before_drawing = false;
     let eye_pos_original = eye_pos.clone();
     let mut center = Vec3::new(0.);
     let center_original = center.clone();
@@ -362,7 +363,7 @@ fn main() {
 
     let now = Instant::now();
     // configure the window/canvas
-    let avg_last_frame_num = 10.0;
+    let avg_last_frame_num = 5.0;
     let alpha = 1.0 - 1.0 / avg_last_frame_num;
     let mut pixels = Vec::new();
     for y in 0..HEIGHT {
@@ -394,20 +395,33 @@ fn main() {
             match state.keycode {
                 VirtualKeyCode::Equals => {
                     enable_super_sample = true;
-                    println!("Enable Super Sample");
+                    println!("Enabled Super Sample");
                     eye_changed = true;
                 }
-                VirtualKeyCode::Subtract => {
+                VirtualKeyCode::Subtract | VirtualKeyCode::Minus => {
                     enable_super_sample = false;
                     println!("Disabled Super Sample");
                     eye_changed = true;
+                    clear_before_drawing = true;
+                }
+                VirtualKeyCode::M => {
+                    enable_motion_blur = true;
+                    enable_super_sample = false;
+                    println!("Enabled Motion Blur, Disabled Super Sample");
+                }
+                VirtualKeyCode::N => {
+                    enable_motion_blur = false;
+                    clear_before_drawing = true;
+                    println!("Disabled Motion Blur");
                 }
                 VirtualKeyCode::Key1 => {
                     mode = Mode::Orbit;
+                    clear_before_drawing = true;
                     println!("Chose Mode: {:?}", mode);
                 }
                 VirtualKeyCode::Key3 => {
                     mode = Mode::FreeMove;
+                    clear_before_drawing = true;
                     println!("Chose Mode: {:?}", mode);
                 }
                 VirtualKeyCode::Key4 => {
@@ -526,15 +540,21 @@ fn main() {
         }
         // multi-pass render
         let mut rendered = false;
-        if eye_changed {
+        if eye_changed || enable_motion_blur || clear_before_drawing {
             pixels.par_iter_mut().for_each(|pixel| {
                 let frag_coord = [pixel.x_f, pixel.y_f];
                 let primary_ray =
                     get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                if clear_before_drawing || !enable_motion_blur {
+                    pixel.clear_color();
+                }
                 pixel.update_color(&shade(primary_ray, &objects, &materials, &lights));
             });
             super_sampled = false;
             rendered = true;
+            if clear_before_drawing {
+                clear_before_drawing = false; // reset the flag
+            }
         } else if enable_super_sample && !super_sampled {
             let grid_size = 1.0 / SUPER_SAMPLE_RATE_F;
             pixels.par_iter_mut().for_each(|pixel| {
