@@ -28,6 +28,7 @@ mod shading;
 mod shapes;
 mod state;
 mod transformations;
+mod tex;
 mod utils;
 
 const EPSILON: f32 = 0.0001;

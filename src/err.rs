@@ -4,7 +4,7 @@ use std::fmt::Formatter;
 #[derive(Copy, Clone, Debug)]
 pub struct DimensionMismatchError {
     expected_shape: [usize; 2],
-    got: [usize; 2]
+    got: [usize; 2],
 }
 
 impl DimensionMismatchError {
@@ -12,7 +12,7 @@ impl DimensionMismatchError {
     {
         DimensionMismatchError {
             expected_shape,
-            got
+            got,
         }
     }
 }
@@ -27,7 +27,7 @@ impl fmt::Display for DimensionMismatchError {
 pub struct OutOfBoundError
 {
     range: [usize; 2],
-    got: [usize; 2]
+    got: [usize; 2],
 }
 
 impl OutOfBoundError
@@ -37,7 +37,7 @@ impl OutOfBoundError
         OutOfBoundError
         {
             range,
-            got
+            got,
         }
     }
 }
@@ -47,4 +47,10 @@ impl fmt::Display for OutOfBoundError
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "Max x = {}, Max y = {}, got ({}, {})", self.range[0], self.range[1], self.got[0], self.got[1])
     }
+}
+
+pub enum ImageCreationError
+{
+    IOError(std::io::Error),
+    ImageError(image::ImageError),
 }
