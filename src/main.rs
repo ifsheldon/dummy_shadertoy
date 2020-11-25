@@ -4,11 +4,13 @@
 // * Analytical formulas by Inigo Quilez, source: http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
 // * glm source code on https://github.com/g-truc/glm
 
+use std::ops::{Index, IndexMut};
 use std::time::Instant;
 
 use num_traits::Pow;
+use pixel_canvas::{Canvas, Color, XY};
 use pixel_canvas::input::glutin::event::VirtualKeyCode;
-use pixel_canvas::{Canvas, Color};
+use pixel_canvas::input::glutin::event::VirtualKeyCode::W;
 use rand::prelude::*;
 use rayon::prelude::*;
 
@@ -276,6 +278,58 @@ impl EMA {
     }
 }
 
+pub struct Pixel
+{
+    pub x: usize,
+    pub y: usize,
+    pub x_f: f32,
+    pub y_f: f32,
+    ema_r: EMA,
+    ema_g: EMA,
+    ema_b: EMA,
+}
+
+impl Pixel
+{
+    pub fn new_ema_pixel(x: usize, y: usize, alpha: f32) -> Self
+    {
+        Pixel
+        {
+            x,
+            y,
+            x_f: x as f32,
+            y_f: y as f32,
+            ema_r: EMA::new(alpha, true),
+            ema_g: EMA::new(alpha, true),
+            ema_b: EMA::new(alpha, true),
+        }
+    }
+
+    pub fn update_color(&mut self, color_f: &Vec3)
+    {
+        self.ema_r.add_stat(color_f.r());
+        self.ema_g.add_stat(color_f.g());
+        self.ema_b.add_stat(color_f.b());
+    }
+
+    pub fn get_color_f(&self) -> Vec3
+    {
+        Vec3::new_rgb(self.ema_r.get(), self.ema_g.get(), self.ema_b.get())
+    }
+
+    pub fn get_color_u8(&self) -> Color
+    {
+        to_color(Vec3::new_rgb(self.ema_r.get(), self.ema_g.get(), self.ema_b.get()))
+    }
+
+    pub fn clear_color(&mut self)
+    {
+        self.ema_r.clear();
+        self.ema_g.clear();
+        self.ema_b.clear();
+    }
+}
+
 //TODO: Implement soft shadows using distribution ray tracing
 //TODO: Implement motion blur using distribution ray tracing
 //TODO: Implement depth of field effect using distribution ray tracing
@@ -312,6 +366,16 @@ fn main() {
 
     let now = Instant::now();
     // configure the window/canvas
+    let avg_last_frame_num = 10.0;
+    let alpha = 1.0 - 1.0 / avg_last_frame_num;
+    let mut pixels = Vec::new();
+    for x in 0..HEIGHT
+    {
+        for y in 0..WIDTH
+        {
+            pixels.push(Pixel::new_ema_pixel(x, y, alpha));
+        }
+    }
     let canvas = Canvas::new(WIDTH, HEIGHT)
         .title("Dynamic Raytracer")
         .state(KeyboardMouseStates::new())
@@ -469,66 +533,52 @@ fn main() {
         // multi-pass render
         let mut rendered = false;
         if eye_changed {
-            frame_buffer_image
-                .par_iter_mut()
-                .enumerate()
-                .for_each(|(idx, pixel)| {
-                    let y = idx / WIDTH;
-                    let x = idx % WIDTH;
-                    let frag_coord = [x as f32, y as f32];
-                    let primary_ray =
-                        get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
-                    *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
-                });
+            pixels.iter_mut().for_each(|pixel| {
+                let frag_coord = [pixel.x_f, pixel.y_f];
+                let primary_ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                pixel.update_color(&shade(primary_ray, &objects, &materials, &lights));
+            });
             super_sampled = false;
             rendered = true;
         } else if enable_super_sample && !super_sampled {
+            pixels.iter_mut().for_each(|pixel| {
+                let grid_size = 1.0 / SUPER_SAMPLE_RATE_F;
+                let rand_colors: Vec<Vec3> = super_sample_indices
+                    .par_iter()
+                    .map(|idx| {
+                        let mut random_generator = rand::thread_rng();
+                        let grid_x = idx.0;
+                        let grid_y = idx.1;
+                        let grid_base_x = pixel.x_f + grid_x as f32 * grid_size;
+                        let grid_base_y = pixel.y_f + grid_y as f32 * grid_size;
+                        let rand_x = grid_base_x + random_generator.gen_range(0.0, grid_size);
+                        let rand_y = grid_base_y + random_generator.gen_range(0.0, grid_size);
+                        let frag_coord = [rand_x, rand_y];
+                        let rand_ray = get_ray_perspective(
+                            fov_radian,
+                            &look_at_mat,
+                            &eye_pos,
+                            &frag_coord,
+                        );
+                        let color_f = shade(rand_ray, &objects, &materials, &lights);
+                        return color_f;
+                    })
+                    .collect();
+                rand_colors.iter().for_each(|color| pixel.update_color(color));
+            });
+            super_sampled = true;
+            rendered = true;
+        }
+        if rendered {
             frame_buffer_image
                 .par_iter_mut()
                 .enumerate()
                 .for_each(|(idx, pixel)| {
-                    let y = idx / WIDTH;
-                    let x = idx % WIDTH;
-                    let grid_size = 1.0 / SUPER_SAMPLE_RATE_F;
-                    // should shoot more rays
-                    let rand_colors: Vec<Vec3> = super_sample_indices
-                        .par_iter()
-                        .map(|idx| {
-                            let mut random_generator = rand::thread_rng();
-                            let grid_x = idx.0;
-                            let grid_y = idx.1;
-                            let grid_base_x = x as f32 + grid_x as f32 * grid_size;
-                            let grid_base_y = y as f32 + grid_y as f32 * grid_size;
-                            let rand_x = grid_base_x + random_generator.gen_range(0.0, grid_size);
-                            let rand_y = grid_base_y + random_generator.gen_range(0.0, grid_size);
-                            let frag_coord = [rand_x, rand_y];
-                            let rand_ray = get_ray_perspective(
-                                fov_radian,
-                                &look_at_mat,
-                                &eye_pos,
-                                &frag_coord,
-                            );
-                            let color_f = shade(rand_ray, &objects, &materials, &lights);
-                            return color_f;
-                        })
-                        .collect();
-                    let mut color_sum = Vec3::new_rgb(
-                        (pixel.r as f32) / 255.0,
-                        (pixel.g as f32) / 255.0,
-                        (pixel.b as f32) / 255.0,
-                    );
-                    for c in rand_colors.iter() {
-                        color_sum.add_(c);
-                    }
-                    color_sum.scalar_div_((SUPER_SAMPLE_RATE * SUPER_SAMPLE_RATE + 1) as f32);
-                    *pixel = to_color(color_sum);
+                    // let y = idx / WIDTH;
+                    // let x = idx % WIDTH;
+                    let pix: &Pixel = pixels.get(idx).unwrap();
+                    *pixel = pix.get_color_u8();
                 });
-            super_sampled = true;
-            rendered = true;
-        } else {
-            // do nothing
-        }
-        if rendered {
             let after = now.elapsed().as_millis();
             let t = after - before;
             if super_sampled {
