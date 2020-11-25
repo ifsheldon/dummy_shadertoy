@@ -375,7 +375,7 @@ fn main() {
         .state(KeyboardMouseStates::new())
         .input(KeyboardMouseStates::handle_input);
 
-    let mut render_time_ema = EMA::new(0.95, false);
+    let mut render_time_ema = EMA::new(0.95, true);
 
     let mut mode = Mode::Orbit;
 
