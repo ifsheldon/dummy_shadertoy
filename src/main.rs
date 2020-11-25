@@ -148,6 +148,7 @@ pub fn add_light(lights: &mut Vec<Light>, position: Vec3, ambient: Vec3, source:
         original_position: position.clone(),
         ambient,
         diffuse: source,
+        r: 0.1,
     };
     lights.push(l);
 }
@@ -326,7 +327,6 @@ impl Pixel {
     }
 }
 
-//TODO: Implement soft shadows using distribution ray tracing
 //TODO: Implement depth of field effect using distribution ray tracing
 //TODO: Implement glossy reflection using distribution ray tracing
 //TODO: Implement environment mapping using spherical projection (15 points) or cube-mapping (25 points)
@@ -355,6 +355,9 @@ fn main() {
     let mut super_sampled = false;
     let mut enable_super_sample = true;
     let mut enable_motion_blur = false;
+    let mut enable_soft_shadow = false;
+    let soft_shadow_pass_num = 5;
+    let mut pass_num = 0;
     let mut clear_before_drawing = false;
     let eye_pos_original = eye_pos.clone();
     let mut center = Vec3::new(0.);
@@ -401,6 +404,18 @@ fn main() {
                 VirtualKeyCode::Subtract | VirtualKeyCode::Minus => {
                     enable_super_sample = false;
                     println!("Disabled Super Sample");
+                    eye_changed = true;
+                    clear_before_drawing = true;
+                }
+                VirtualKeyCode::J => {
+                    enable_soft_shadow = false;
+                    println!("Disabled Soft Shadow");
+                    eye_changed = true;
+                    clear_before_drawing = true;
+                }
+                VirtualKeyCode::K => {
+                    enable_soft_shadow = true;
+                    println!("Enabled Soft Shadow");
                     eye_changed = true;
                     clear_before_drawing = true;
                 }
@@ -548,14 +563,15 @@ fn main() {
                 if clear_before_drawing || !enable_motion_blur {
                     pixel.clear_color();
                 }
-                pixel.update_color(&shade(primary_ray, &objects, &materials, &lights));
+                pixel.update_color(&shade(primary_ray, &objects, &materials, &lights, false));
             });
             super_sampled = false;
             rendered = true;
+            pass_num = 0;
             if clear_before_drawing {
                 clear_before_drawing = false; // reset the flag
             }
-        } else if enable_super_sample && !super_sampled {
+        } else if (enable_super_sample && !super_sampled) || (enable_soft_shadow && pass_num < soft_shadow_pass_num) {
             let grid_size = 1.0 / SUPER_SAMPLE_RATE_F;
             pixels.par_iter_mut().for_each(|pixel| {
                 let rand_colors: Vec<Vec3> = super_sample_indices
@@ -571,7 +587,7 @@ fn main() {
                         let frag_coord = [rand_x, rand_y];
                         let rand_ray =
                             get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
-                        let color_f = shade(rand_ray, &objects, &materials, &lights);
+                        let color_f = shade(rand_ray, &objects, &materials, &lights, enable_soft_shadow);
                         return color_f;
                     })
                     .collect();
@@ -581,6 +597,9 @@ fn main() {
             });
             super_sampled = true;
             rendered = true;
+            if enable_soft_shadow {
+                pass_num += 1;
+            }
         }
         if rendered {
             frame_buffer_image

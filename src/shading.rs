@@ -1,7 +1,9 @@
+use rand::prelude::*;
+
+use crate::*;
 use crate::data::{
     Add, Cross, Mat3, Mat4, MatVecDot, Minus, Normalize, Product, ScalarMul, Vec3, Vec4, VecDot,
 };
-use crate::*;
 
 #[derive(Copy, Clone)]
 pub struct Ray {
@@ -41,6 +43,27 @@ pub struct Light {
     pub original_position: Vec3,
     pub ambient: Vec3,
     pub diffuse: Vec3,
+    pub r: f32,
+}
+
+fn get_jittered_light_pos(light: &Light, pos: &Vec3) -> Vec3
+{
+    let light_basis = look_at(&light.position, pos, &Vec3::new_xyz(0., 0.0, 1.0));
+    let mut random = rand::thread_rng();
+    let mut x = random.gen::<f32>() * 2.0 - 1.0;
+    let mut y = (1.0 - x * x).sqrt();
+    let r2 = random.gen::<f32>() * 2.0 - 1.0;
+    y *= r2;
+    y *= light.r;
+    x *= light.r;
+    let mut camera_up = light_basis._get_column(1);
+    let mut camera_right = light_basis._get_column(0);
+    camera_up.scalar_mul_(y);
+    camera_right.scalar_mul_(x);
+    let mut light_pos = light.position.clone();
+    light_pos.add_(&camera_up);
+    light_pos.add_(&camera_right);
+    return light_pos;
 }
 
 #[inline]
@@ -218,6 +241,7 @@ pub fn cast_ray(
     hit_normal: &mut Vec3,
     k_rg: &mut Vec3,
     hit_obj: &mut i32,
+    enable_soft_shadow: bool,
 ) -> Vec3 {
     let (obj_idx, dist) = shortest_dist_to_surface(objects, &ray.origin, &ray.direction, pre_obj);
     if dist > MAX_DIST - EPSILON {
@@ -234,7 +258,12 @@ pub fn cast_ray(
         *k_rg = hit_material.global_reflection.clone();
         let mut local_color = Vec3::new(0.);
         for l in lights {
-            let shadow_ray = l.position._minus(hit_pos);
+            let shadow_ray = if enable_soft_shadow {
+                let light_pos = get_jittered_light_pos(l, hit_pos);
+                light_pos._minus(hit_pos)
+            } else {
+                l.position._minus(hit_pos)
+            };
             let s_ray = Ray {
                 origin: hit_pos.clone(),
                 direction: shadow_ray.normalize(),
@@ -300,6 +329,7 @@ pub fn shade(
     objects: &Vec<Object>,
     materials: &Vec<Material>,
     lights: &Vec<Light>,
+    enable_soft_shadow: bool,
 ) -> Vec3 {
     let eps = Vec3::new(EPSILON);
     let mut next_ray = primary_ray.clone();
@@ -322,6 +352,7 @@ pub fn shade(
             &mut hit_normal,
             &mut k_rg,
             &mut pre_obj,
+            enable_soft_shadow,
         );
         color_result.add_(&component_k_rg.product(&color_local));
         if !has_hit {
