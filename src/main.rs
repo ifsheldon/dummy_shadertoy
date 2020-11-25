@@ -356,7 +356,7 @@ fn main() {
     let mut enable_super_sample = false;
     let mut enable_motion_blur = false;
     let mut enable_soft_shadow = false;
-    let mut enable_dov = true;
+    let mut enable_dov = false;
     let original_focus_plane_to_eye_dist = 0.5;
     let mut focus_plane_to_eye_dist = original_focus_plane_to_eye_dist;
     let dov_eye_width_wc = 0.5;
