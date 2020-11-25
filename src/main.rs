@@ -14,7 +14,7 @@ use pixel_canvas::input::glutin::event::VirtualKeyCode::W;
 use rand::prelude::*;
 use rayon::prelude::*;
 
-use crate::data::{Add, Length, Mat4, Minus, ScalarDiv, ScalarMul, Vec3, Vec4};
+use crate::data::{Add, Length, Mat4, Minus, Normalize, ScalarDiv, ScalarMul, Vec3, Vec4};
 use crate::shading::*;
 use crate::shapes::{
     sdf_cube, sdf_cylinder, sdf_ellipsoid, sdf_plane, sdf_rounded_cylinder, sdf_sphere,
@@ -353,9 +353,15 @@ fn main() {
     let mut eye_pos = Vec3::new_xyz(0.0, 0.0, -1.0);
     let mut eye_changed = true; //for the first frame
     let mut super_sampled = false;
-    let mut enable_super_sample = true;
+    let mut enable_super_sample = false;
     let mut enable_motion_blur = false;
     let mut enable_soft_shadow = false;
+    let mut enable_dov = true;
+    let original_focus_plane_to_eye_dist = 0.5;
+    let mut focus_plane_to_eye_dist = original_focus_plane_to_eye_dist;
+    let dov_eye_width_wc = 0.5;
+    let dov_eye_height_wc = 0.5;
+    let mut doved = false;
     let soft_shadow_pass_num = 5;
     let mut pass_num = 0;
     let mut clear_before_drawing = false;
@@ -406,6 +412,36 @@ fn main() {
                     println!("Disabled Super Sample");
                     eye_changed = true;
                     clear_before_drawing = true;
+                }
+                VirtualKeyCode::Left => {
+                    enable_dov = false;
+                    println!("Disabled DOV");
+                    eye_changed = true;
+                    clear_before_drawing = true;
+                    focus_plane_to_eye_dist = original_focus_plane_to_eye_dist;
+                }
+                VirtualKeyCode::Right => {
+                    enable_dov = true;
+                    println!("Enabled DOV");
+                    eye_changed = true;
+                    enable_dov = true;
+                }
+                VirtualKeyCode::Up => {
+                    if enable_dov {
+                        focus_plane_to_eye_dist += 0.1;
+                        doved = false;
+                        println!("Focus Plane to eye distance = {}", focus_plane_to_eye_dist);
+                    }
+                }
+                VirtualKeyCode::Down => {
+                    if enable_dov {
+                        focus_plane_to_eye_dist -= 0.1;
+                        if focus_plane_to_eye_dist <= 0.1 {
+                            focus_plane_to_eye_dist = 0.1;
+                        }
+                        println!("Focus Plane to eye distance = {}", focus_plane_to_eye_dist);
+                        doved = false;
+                    }
                 }
                 VirtualKeyCode::J => {
                     enable_soft_shadow = false;
@@ -566,6 +602,7 @@ fn main() {
                 pixel.update_color(&shade(primary_ray, &objects, &materials, &lights, false));
             });
             super_sampled = false;
+            doved = false;
             rendered = true;
             pass_num = 0;
             if clear_before_drawing {
@@ -600,6 +637,46 @@ fn main() {
             if enable_soft_shadow {
                 pass_num += 1;
             }
+        } else if enable_dov && !doved {
+            doved = true;
+            let grid_x = dov_eye_width_wc / SUPER_SAMPLE_RATE_F;
+            let grid_y = dov_eye_width_wc / SUPER_SAMPLE_RATE_F;
+            let off_x = -0.5 * dov_eye_width_wc;
+            let off_y = -0.5 * dov_eye_height_wc;
+            pixels.par_iter_mut().for_each(|pixel| {
+                let frag_coord = [pixel.x_f, pixel.y_f];
+                let test_ray =
+                    get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                let focus_point_wc = test_ray.origin._add(&test_ray.direction.scalar_mul(focus_plane_to_eye_dist));
+                let mut camera_up = look_at_mat._get_column(1);
+                let mut camera_right = look_at_mat._get_column(0);
+                let rand_colors: Vec<Vec3> = super_sample_indices.par_iter().map(|idx| {
+                    let mut random_generator = rand::thread_rng();
+                    let jitter_x = random_generator.gen_range(0.0, grid_x);
+                    let jitter_y = random_generator.gen_range(0.0, grid_y);
+                    let base_x = idx.0 as f32 * grid_x;
+                    let base_y = idx.1 as f32 * grid_y;
+                    let r = jitter_x + base_x + off_x;
+                    let u = jitter_y + base_y + off_y;
+                    let up = camera_up.scalar_mul(u);
+                    let right = camera_right.scalar_mul(r);
+                    let mut cam_pos = eye_pos._add(&right);
+                    cam_pos.add_(&up);
+                    let mut dir = focus_point_wc._minus(&cam_pos);
+                    dir.normalize_();
+                    let ray = Ray {
+                        origin: cam_pos,
+                        direction: dir,
+                    };
+                    let color_f = shade(ray, &objects, &materials, &lights, false);
+                    return color_f;
+                }).collect();
+                pixel.clear_color();
+                rand_colors
+                    .iter()
+                    .for_each(|color| pixel.update_color(color));
+            });
+            rendered = true;
         }
         if rendered {
             frame_buffer_image
