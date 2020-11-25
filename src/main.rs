@@ -4,19 +4,23 @@
 // * Analytical formulas by Inigo Quilez, source: http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
 // * glm source code on https://github.com/g-truc/glm
 
-use crate::data::{Add, Length, Mat4, Minus, ScalarMul, Vec3, Vec4, _Mat};
+use std::ops::{Index, IndexMut};
+use std::time::Instant;
+
+use pixel_canvas::{Canvas, Color, XY};
+use pixel_canvas::input::glutin::event::VirtualKeyCode;
+use pixel_canvas::input::glutin::event::VirtualKeyCode::W;
+use rand::prelude::*;
+use rayon::prelude::*;
+
+use crate::data::{Add, Length, Mat4, Minus, Normalize, ScalarDiv, ScalarMul, Vec3, Vec4};
+use crate::utils::*;
 use crate::shading::*;
 use crate::shapes::{
     sdf_cube, sdf_cylinder, sdf_ellipsoid, sdf_plane, sdf_rounded_cylinder, sdf_sphere,
 };
 use crate::state::KeyboardMouseStates;
 use crate::transformations::*;
-use pixel_canvas::input::glutin::event::VirtualKeyCode;
-use pixel_canvas::{Canvas, Color};
-use rayon::prelude::*;
-use std::io::stdin;
-use std::process::exit;
-use std::time::Instant;
 
 mod data;
 mod err;
@@ -24,12 +28,13 @@ mod shading;
 mod shapes;
 mod state;
 mod transformations;
+mod utils;
 
 const EPSILON: f32 = 0.0001;
 const MIN_DIST: f32 = 0.0;
 const MAX_DIST: f32 = 100.0;
 const MAX_MARCHING_STEPS: i32 = 255;
-const NUM_ITERATIONS: i32 = 3;
+const NUM_ITERATIONS: i32 = 2;
 const BACKGROUND_COLOR: (f32, f32, f32) = (0.4, 0.4, 0.4);
 const WIDTH: usize = 640;
 const WIDTH_F: f32 = WIDTH as f32;
@@ -144,6 +149,7 @@ pub fn add_light(lights: &mut Vec<Light>, position: Vec3, ambient: Vec3, source:
         original_position: position.clone(),
         ambient,
         diffuse: source,
+        r: 0.1,
     };
     lights.push(l);
 }
@@ -227,51 +233,71 @@ pub fn cast_hit_ray(ray: &Ray, objects: &Vec<Object>) -> Option<(i32, Vec3)> {
 #[derive(PartialEq, Debug)]
 pub enum Mode {
     Orbit,
-    Panning,
-    FreeMove,
     Zoom,
-    Select,
-    MovingLight,
     AutoMoveCam,
 }
+
+
+pub struct Pixel {
+    pub x: usize,
+    pub y: usize,
+    pub x_f: f32,
+    pub y_f: f32,
+    ema_r: EMA,
+    ema_g: EMA,
+    ema_b: EMA,
+}
+
+impl Pixel {
+    pub fn new_ema_pixel(x: usize, y: usize, alpha: f32) -> Self {
+        Pixel {
+            x,
+            y,
+            x_f: x as f32,
+            y_f: y as f32,
+            ema_r: EMA::new(alpha, true),
+            ema_g: EMA::new(alpha, true),
+            ema_b: EMA::new(alpha, true),
+        }
+    }
+
+    pub fn update_color(&mut self, color_f: &Vec3) {
+        self.ema_r.add_stat(color_f.r());
+        self.ema_g.add_stat(color_f.g());
+        self.ema_b.add_stat(color_f.b());
+    }
+
+    pub fn get_color_f(&self) -> Vec3 {
+        Vec3::new_rgb(self.ema_r.get(), self.ema_g.get(), self.ema_b.get())
+    }
+
+    pub fn get_color_u8(&self) -> Color {
+        to_color(Vec3::new_rgb(
+            self.ema_r.get(),
+            self.ema_g.get(),
+            self.ema_b.get(),
+        ))
+    }
+
+    pub fn clear_color(&mut self) {
+        self.ema_r.clear();
+        self.ema_g.clear();
+        self.ema_b.clear();
+    }
+}
+
+//TODO: Implement environment mapping using spherical projection (15 points) or cube-mapping (25 points)
 
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
-    const SELECT_CIRCLE_RADIUS_SQUARE: i32 = 5 * 5;
-    let orthogonal_ray_dir_ec = Vec3::new_xyz(0., 0., 1.);
-    let x_axis = Vec3::new_xyz(1., 0., 0.);
-    let y_axis = Vec3::new_xyz(0., 1., 0.);
-    let z_axis = Vec3::new_xyz(0., 0., 1.);
-    let use_perspective;
-    loop {
-        println!("Use Perspective? y for perspective view, n for orthogonal view");
-        let mut buf = String::new();
-        let result = stdin().read_line(&mut buf);
-        match result {
-            Ok(_) => {
-                if buf.len() <= 3 {
-                    let s = buf.to_lowercase();
-                    if s.contains("y") {
-                        use_perspective = true;
-                        println!("Using Perspective");
-                        break;
-                    } else if s.contains("n") {
-                        use_perspective = false;
-                        println!("Using Orthogonal");
-                        break;
-                    } else {
-                        eprintln!("Wrong Input, try again");
-                    }
-                } else {
-                    println!("Entered too many characters, try again");
-                }
-            }
-            Err(e) => {
-                eprintln!("Unexpected Error, exiting");
-                eprintln!("{}", e);
-                exit(-1);
-            }
+    const SUPER_SAMPLE_RATE: usize = 2; // super sample cost = super sample rate ^ 2
+    const SUPER_SAMPLE_RATE_F: f32 = SUPER_SAMPLE_RATE as f32;
+
+    let mut super_sample_indices = Vec::new();
+    for x in 0..SUPER_SAMPLE_RATE {
+        for y in 0..SUPER_SAMPLE_RATE {
+            super_sample_indices.push((x, y));
         }
     }
 
@@ -282,98 +308,146 @@ fn main() {
     let fov_radian = (2.0_f32).atan() * 2.;
 
     let mut eye_pos = Vec3::new_xyz(0.0, 0.0, -1.0);
-    let eye_pos_original = eye_pos.clone();
+    let mut eye_changed = true; //for the first frame
+    let mut super_sampled = false;
+    let mut enable_super_sample = false;
+    let mut enable_motion_blur = false;
+    let mut enable_soft_shadow = false;
+    let mut enable_dov = false;
+    let mut enable_glossy = false;
+    let original_focus_plane_to_eye_dist = 0.5;
+    let mut focus_plane_to_eye_dist = original_focus_plane_to_eye_dist;
+    let dov_eye_width_wc = 0.5;
+    let dov_eye_height_wc = 0.5;
+    let mut doved = false;
+    let soft_shadow_pass_num = 5;
+    let mut pass_num = 0;
+    let mut clear_before_drawing = false;
     let mut center = Vec3::new(0.);
     let center_original = center.clone();
-    let mut up = Vec3::new_xyz(0.0, 1.0, 0.0);
-    let up_original = up.clone();
-
-    let dw = VIEW_PLANE_WIDTH / WIDTH_F;
-    let dh = VIEW_PLANE_HEIGHT / HEIGHT_F;
+    let up = Vec3::new_xyz(0.0, 1.0, 0.0);
 
     let now = Instant::now();
     // configure the window/canvas
+    let avg_last_frame_num = 5.0;
+    let alpha = 1.0 - 1.0 / avg_last_frame_num;
+    let mut pixels = Vec::new();
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            pixels.push(Pixel::new_ema_pixel(x, y, alpha));
+        }
+    }
     let canvas = Canvas::new(WIDTH, HEIGHT)
         .title("Dynamic Raytracer")
         .state(KeyboardMouseStates::new())
         .input(KeyboardMouseStates::handle_input);
-    let mut before = now.elapsed().as_millis();
-    let mut after = before;
-    let mut render_time_ema = 0.;
-    let ema_alpha = 0.95;
-    let ema_beta = 1. - ema_alpha;
+
+    let mut render_time_ema = EMA::new(0.95, true);
 
     let mut mode = Mode::Orbit;
 
     let mut theta: f32 = 0.; // wc the angle between -z and +x
     let mut phi: f32 = std::f32::consts::FRAC_PI_2; // wc complement angle of the angle between the line and z-x plane
 
-    let mut selected_obj_idx: i32 = -1;
     let mut auto_moving_angle: f32 = 0.;
     let angle_delta = (2.5_f32).to_radians();
 
     // render up to 60fps
     canvas.render(move |state, frame_buffer_image| {
-        before = now.elapsed().as_millis();
+        let before = now.elapsed().as_millis();
         // switching modes
-        let mut switching_mode = false;
+        let mut switching_mode = true;
         if state.received_keycode {
             match state.keycode {
+                VirtualKeyCode::G => {
+                    enable_glossy = true;
+                    println!("Enable Glossy");
+                    eye_changed = true;
+                    clear_before_drawing = true;
+                }
+                VirtualKeyCode::H => {
+                    enable_glossy = false;
+                    println!("Disabled Glossy");
+                    eye_changed = true;
+                    clear_before_drawing = true;
+                }
+                VirtualKeyCode::Equals => {
+                    enable_super_sample = true;
+                    println!("Enabled Super Sample");
+                    eye_changed = true;
+                }
+                VirtualKeyCode::Subtract | VirtualKeyCode::Minus => {
+                    enable_super_sample = false;
+                    println!("Disabled Super Sample");
+                    eye_changed = true;
+                    clear_before_drawing = true;
+                }
+                VirtualKeyCode::Left => {
+                    enable_dov = false;
+                    println!("Disabled DOV");
+                    eye_changed = true;
+                    clear_before_drawing = true;
+                    focus_plane_to_eye_dist = original_focus_plane_to_eye_dist;
+                }
+                VirtualKeyCode::Right => {
+                    enable_dov = true;
+                    println!("Enabled DOV");
+                    eye_changed = true;
+                    enable_dov = true;
+                }
+                VirtualKeyCode::Up => {
+                    if enable_dov {
+                        focus_plane_to_eye_dist += 0.1;
+                        doved = false;
+                        println!("Focus Plane to eye distance = {}", focus_plane_to_eye_dist);
+                    }
+                }
+                VirtualKeyCode::Down => {
+                    if enable_dov {
+                        focus_plane_to_eye_dist -= 0.1;
+                        if focus_plane_to_eye_dist <= 0.1 {
+                            focus_plane_to_eye_dist = 0.1;
+                        }
+                        println!("Focus Plane to eye distance = {}", focus_plane_to_eye_dist);
+                        doved = false;
+                    }
+                }
+                VirtualKeyCode::J => {
+                    enable_soft_shadow = false;
+                    println!("Disabled Soft Shadow");
+                    eye_changed = true;
+                    clear_before_drawing = true;
+                }
+                VirtualKeyCode::K => {
+                    enable_soft_shadow = true;
+                    println!("Enabled Soft Shadow");
+                    eye_changed = true;
+                    clear_before_drawing = true;
+                }
+                VirtualKeyCode::M => {
+                    enable_motion_blur = true;
+                    enable_super_sample = false;
+                    println!("Enabled Motion Blur, Disabled Super Sample");
+                }
+                VirtualKeyCode::N => {
+                    enable_motion_blur = false;
+                    clear_before_drawing = true;
+                    println!("Disabled Motion Blur");
+                }
                 VirtualKeyCode::Key1 => {
                     mode = Mode::Orbit;
+                    clear_before_drawing = true;
                     println!("Chose Mode: {:?}", mode);
-                    switching_mode = true;
-                }
-                VirtualKeyCode::Key2 => {
-                    mode = Mode::Panning;
-                    println!("Chose Mode: {:?}", mode);
-                    switching_mode = true;
-                }
-                VirtualKeyCode::Key3 => {
-                    mode = Mode::FreeMove;
-                    println!("Chose Mode: {:?}", mode);
-                    switching_mode = true
                 }
                 VirtualKeyCode::Key4 => {
                     mode = Mode::AutoMoveCam;
                     println!("Chose Mode: {:?}", mode);
-                    switching_mode = true;
                 }
                 VirtualKeyCode::Z => {
                     mode = Mode::Zoom;
                     println!("Chose Mode: {:?}", mode);
-                    switching_mode = true
                 }
-                VirtualKeyCode::X => {
-                    mode = Mode::Select;
-                    println!("Chose Mode: {:?}", mode);
-                    switching_mode = true
-                }
-                VirtualKeyCode::C => {
-                    selected_obj_idx = -1;
-                    switching_mode = true;
-                }
-                VirtualKeyCode::V => {
-                    mode = Mode::MovingLight;
-                    println!("Chose Mode: {:?}", mode);
-                    switching_mode = true;
-                }
-                _ => {}
-            }
-        }
-        // moving the light
-        if !switching_mode && state.received_keycode && mode == Mode::MovingLight {
-            let light = lights.get_mut(0).unwrap();
-            let light_pos = &mut light.position;
-            match state.keycode {
-                VirtualKeyCode::A => light_pos.set_x(light_pos.x() - 0.1),
-                VirtualKeyCode::D => light_pos.set_x(light_pos.x() + 0.1),
-                VirtualKeyCode::W => light_pos.set_z(light_pos.z() + 0.1),
-                VirtualKeyCode::S => light_pos.set_z(light_pos.z() - 0.1),
-                VirtualKeyCode::Q => light_pos.set_y(light_pos.y() + 0.1),
-                VirtualKeyCode::E => light_pos.set_y(light_pos.y() - 0.1),
-                VirtualKeyCode::R => *light_pos = light.original_position.clone(),
-                _ => {}
+                _ => switching_mode = false,
             }
         }
         // Orbiting camera
@@ -381,17 +455,27 @@ fn main() {
             println!("Key Pressed: {:?}", state.keycode);
             match state.keycode {
                 // for orbiting around the origin
-                VirtualKeyCode::A => theta += (5.0_f32).to_radians(),
-                VirtualKeyCode::D => theta -= (5.0_f32).to_radians(),
+                VirtualKeyCode::A => {
+                    theta += (5.0_f32).to_radians();
+                    eye_changed = true
+                }
+                VirtualKeyCode::D => {
+                    theta -= (5.0_f32).to_radians();
+                    eye_changed = true
+                }
                 VirtualKeyCode::W => {
                     phi -= (2.5_f32).to_radians();
+                    eye_changed = true;
                     if phi <= 0. {
                         phi = 0.01;
+                        eye_changed = false;
                     }
                 }
                 VirtualKeyCode::S => {
                     phi += (2.5_f32).to_radians();
+                    eye_changed = true;
                     if phi >= std::f32::consts::PI {
+                        eye_changed = false;
                         phi = std::f32::consts::PI - 0.01;
                     }
                 }
@@ -399,224 +483,31 @@ fn main() {
                     theta = 0.;
                     phi = std::f32::consts::FRAC_PI_2;
                     center = center_original.clone();
+                    eye_changed = true;
                 }
-                _ => {}
+                _ => eye_changed = false,
             }
             let radius = eye_pos._minus(&center).get_length();
             eye_pos.set_y(phi.cos() * radius);
             eye_pos.set_z(-theta.cos() * radius * phi.sin());
             eye_pos.set_x(theta.sin() * radius * phi.sin());
         }
-        // Moving camera in wc
-        if !switching_mode && state.received_keycode && mode == Mode::FreeMove {
-            match state.keycode {
-                VirtualKeyCode::A => eye_pos.set_x(eye_pos.x() - 0.1),
-                VirtualKeyCode::D => eye_pos.set_x(eye_pos.x() + 0.1),
-                VirtualKeyCode::W => eye_pos.set_z(eye_pos.z() + 0.1),
-                VirtualKeyCode::S => eye_pos.set_z(eye_pos.z() - 0.1),
-                VirtualKeyCode::Q => eye_pos.set_y(eye_pos.y() + 0.1),
-                VirtualKeyCode::E => eye_pos.set_y(eye_pos.y() - 0.1),
-                VirtualKeyCode::R => {
-                    eye_pos = eye_pos_original.clone();
-                    center = center_original.clone();
-                }
-                _ => {}
-            }
-        }
         let look_at_mat = look_at(&eye_pos, &center, &up);
-        // bottom-left(0,0) top-right(w, h)
-        let cursor_position = (state.x as i32, state.y as i32);
-        // selecting object
-        if state.received_mouse_press {
-            println!(
-                "Mouse Pressed at ({}, {})",
-                cursor_position.0, cursor_position.1
-            );
-            let frag_coord = [cursor_position.0 as f32, cursor_position.1 as f32];
-            let ray: Ray = if use_perspective {
-                get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord)
-            } else {
-                get_ray_orthogonal(
-                    dw,
-                    dh,
-                    &orthogonal_ray_dir_ec,
-                    &eye_pos,
-                    &look_at_mat,
-                    &frag_coord,
-                )
-            };
-            let hit_object_idx = cast_hit_ray(&ray, &objects);
-            match hit_object_idx {
-                Some((idx, hit_pos)) => {
-                    let obj: &Object = objects.get(idx as usize).unwrap();
-                    match mode {
-                        Mode::Zoom => {
-                            println!(
-                                "Focused on hit position ({}, {}, {})",
-                                hit_pos.x(),
-                                hit_pos.y(),
-                                hit_pos.z()
-                            );
-                            center = hit_pos.clone();
-                            // may need to adjust parameter according to camera move mode?
-                            // unimplemented!()
-                        }
-                        Mode::Select => {
-                            println!("Selected Object(idx={}, type={:?})", idx, obj.shape,);
-                            selected_obj_idx = idx;
-                        }
-                        _ => println!(
-                            "Mouse Pressed at ({}, {})",
-                            cursor_position.0, cursor_position.1
-                        ),
-                    }
-                }
-                None => {}
-            }
-        }
-
-        let mut rotating_or_scaling = false;
-        if !switching_mode && state.received_keycode && selected_obj_idx != -1 {
-            let obj = objects.get_mut(selected_obj_idx as usize).unwrap();
-            let identity = Mat4::identity();
-            match state.keycode {
-                // Rotate around x
-                VirtualKeyCode::I => {
-                    let rotate = rotate_obj(identity, (5.0_f32).to_radians(), x_axis.clone());
-                    let new_transformation = rotate.dot_mat(&obj.transformation);
-                    obj.transformation = new_transformation;
-                    rotating_or_scaling = true;
-                }
-                VirtualKeyCode::K => {
-                    let rotate = rotate_obj(identity, (-5.0_f32).to_radians(), x_axis.clone());
-                    let new_transformation = rotate.dot_mat(&obj.transformation);
-                    obj.transformation = new_transformation;
-                    rotating_or_scaling = true;
-                }
-                // Rotate around y
-                VirtualKeyCode::J => {
-                    let rotate = rotate_obj(identity, (5.0_f32).to_radians(), y_axis.clone());
-                    let new_transformation = rotate.dot_mat(&obj.transformation);
-                    obj.transformation = new_transformation;
-                    rotating_or_scaling = true;
-                }
-                VirtualKeyCode::L => {
-                    let rotate = rotate_obj(identity, (-5.0_f32).to_radians(), y_axis.clone());
-                    let new_transformation = rotate.dot_mat(&obj.transformation);
-                    obj.transformation = new_transformation;
-                    rotating_or_scaling = true;
-                }
-                // Rotate around z
-                VirtualKeyCode::U => {
-                    let rotate = rotate_obj(identity, (5.0_f32).to_radians(), z_axis.clone());
-                    let new_transformation = rotate.dot_mat(&obj.transformation);
-                    obj.transformation = new_transformation;
-                    rotating_or_scaling = true;
-                }
-                VirtualKeyCode::O => {
-                    let rotate = rotate_obj(identity, (-5.0_f32).to_radians(), z_axis.clone());
-                    let new_transformation = rotate.dot_mat(&obj.transformation);
-                    obj.transformation = new_transformation;
-                    rotating_or_scaling = true;
-                }
-                // Scale
-                VirtualKeyCode::PageUp => {
-                    obj.transformation = scale(&obj.transformation, 1.1);
-                    rotating_or_scaling = true;
-                }
-                VirtualKeyCode::PageDown => {
-                    obj.transformation = scale(&obj.transformation, 0.85);
-                    rotating_or_scaling = true;
-                }
-                // reset
-                VirtualKeyCode::M => {
-                    obj.transformation = obj.original_transformation.clone();
-                    rotating_or_scaling = true;
-                }
-                _ => {}
-            }
-        }
         // zooming
-        if !rotating_or_scaling && !switching_mode && state.received_keycode && mode == Mode::Zoom {
+        if !switching_mode && state.received_keycode && mode == Mode::Zoom {
             let mut camera_focus_direction = look_at_mat._get_column(2);
             match state.keycode {
                 VirtualKeyCode::Q => {
                     camera_focus_direction.scalar_mul_(0.1);
                     eye_pos.add_(&camera_focus_direction);
+                    eye_changed = true;
                 }
                 VirtualKeyCode::E => {
                     camera_focus_direction.scalar_mul_(0.1);
                     eye_pos.minus_(&camera_focus_direction);
+                    eye_changed = true;
                 }
-                _ => {}
-            }
-        }
-        // panning camera or the selected object
-        if !rotating_or_scaling && !switching_mode && state.received_keycode && mode == Mode::Panning {
-            let mut camera_up = look_at_mat._get_column(1);
-            let mut camera_right = look_at_mat._get_column(0);
-            if selected_obj_idx != -1 {
-                let obj = objects.get_mut(selected_obj_idx as usize).unwrap();
-                match state.keycode {
-                    // for panning
-                    VirtualKeyCode::W => {
-                        camera_up.scalar_mul_(0.1);
-                        let new_transformation =
-                            translate_obj(obj.transformation.clone(), &camera_up);
-                        obj.transformation = new_transformation;
-                    }
-                    VirtualKeyCode::S => {
-                        camera_up.scalar_mul_(-0.1);
-                        let new_transformation =
-                            translate_obj(obj.transformation.clone(), &camera_up);
-                        obj.transformation = new_transformation;
-                    }
-                    VirtualKeyCode::A => {
-                        camera_right.scalar_mul_(-0.1);
-                        let new_transformation =
-                            translate_obj(obj.transformation.clone(), &camera_right);
-                        obj.transformation = new_transformation;
-                    }
-                    VirtualKeyCode::D => {
-                        camera_right.scalar_mul_(0.1);
-                        let new_transformation =
-                            translate_obj(obj.transformation.clone(), &camera_right);
-                        obj.transformation = new_transformation;
-                    }
-                    VirtualKeyCode::R => {
-                        obj.transformation = obj.original_transformation.clone();
-                    }
-                    _ => {}
-                }
-            } else {
-                match state.keycode {
-                    // for panning
-                    VirtualKeyCode::W => {
-                        camera_up.scalar_mul_(0.1);
-                        eye_pos.add_(&camera_up);
-                        center.add_(&camera_up);
-                    }
-                    VirtualKeyCode::S => {
-                        camera_up.scalar_mul_(0.1);
-                        eye_pos.minus_(&camera_up);
-                        center.minus_(&camera_up);
-                    }
-                    VirtualKeyCode::A => {
-                        camera_right.scalar_mul_(0.1);
-                        eye_pos.minus_(&camera_right);
-                        center.minus_(&camera_right);
-                    }
-                    VirtualKeyCode::D => {
-                        camera_right.scalar_mul_(0.1);
-                        eye_pos.add_(&camera_right);
-                        center.add_(&camera_right);
-                    }
-                    VirtualKeyCode::R => {
-                        eye_pos = eye_pos_original.clone();
-                        center = center_original.clone();
-                    }
-                    _ => {}
-                }
+                _ => eye_changed = false,
             }
         }
         // for automatic moving the camera
@@ -625,73 +516,120 @@ fn main() {
             eye_pos.set_z(-auto_moving_angle.cos());
             eye_pos.set_y(0.);
             auto_moving_angle += angle_delta;
+            eye_changed = true;
         }
-        frame_buffer_image
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(idx, pixel)| {
-                let y = idx / WIDTH;
-                let x = idx % WIDTH;
-                let dx = x as i32 - cursor_position.0;
-                let dy = y as i32 - cursor_position.1;
-                let dist = dx * dx + dy * dy;
-                let in_circle = dist < SELECT_CIRCLE_RADIUS_SQUARE;
-                if in_circle {
-                    *pixel = Color {
-                        r: 255,
-                        g: 255,
-                        b: 255,
-                    };
-                    return;
+        // multi-pass render
+        let mut rendered = false;
+        if eye_changed || enable_motion_blur || clear_before_drawing {
+            pixels.par_iter_mut().for_each(|pixel| {
+                let frag_coord = [pixel.x_f, pixel.y_f];
+                let primary_ray =
+                    get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                if clear_before_drawing || !enable_motion_blur {
+                    pixel.clear_color();
                 }
-                let frag_coord = [x as f32, y as f32];
-                let primary_ray: Ray = if use_perspective {
-                    get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord)
-                } else {
-                    get_ray_orthogonal(
-                        dw,
-                        dh,
-                        &orthogonal_ray_dir_ec,
-                        &eye_pos,
-                        &look_at_mat,
-                        &frag_coord,
-                    )
-                };
-                *pixel = to_color(shade(primary_ray, &objects, &materials, &lights));
+                pixel.update_color(&shade(primary_ray, &objects, &materials, &lights, false, enable_glossy));
             });
-        after = now.elapsed().as_millis();
-        let t = after - before;
-        println!("Took {} ms to render one frame", t);
-        render_time_ema = ema_alpha * render_time_ema + ema_beta * (t as f32);
-        println!("Render time EMA = {}", render_time_ema);
+            super_sampled = false;
+            doved = false;
+            rendered = true;
+            pass_num = 0;
+            if clear_before_drawing {
+                clear_before_drawing = false; // reset the flag
+            }
+        } else if (enable_super_sample && !super_sampled) || (enable_soft_shadow && pass_num < soft_shadow_pass_num) {
+            let grid_size = 1.0 / SUPER_SAMPLE_RATE_F;
+            pixels.par_iter_mut().for_each(|pixel| {
+                let rand_colors: Vec<Vec3> = super_sample_indices
+                    .par_iter()
+                    .map(|idx| {
+                        let mut random_generator = rand::thread_rng();
+                        let grid_x = idx.0;
+                        let grid_y = idx.1;
+                        let grid_base_x = pixel.x_f + grid_x as f32 * grid_size;
+                        let grid_base_y = pixel.y_f + grid_y as f32 * grid_size;
+                        let rand_x = grid_base_x + random_generator.gen_range(0.0, grid_size);
+                        let rand_y = grid_base_y + random_generator.gen_range(0.0, grid_size);
+                        let frag_coord = [rand_x, rand_y];
+                        let rand_ray =
+                            get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                        let color_f = shade(rand_ray, &objects, &materials, &lights, enable_soft_shadow, false);
+                        return color_f;
+                    })
+                    .collect();
+                rand_colors
+                    .iter()
+                    .for_each(|color| pixel.update_color(color));
+            });
+            super_sampled = true;
+            rendered = true;
+            if enable_soft_shadow {
+                pass_num += 1;
+            }
+        } else if enable_dov && !doved {
+            doved = true;
+            let grid_x = dov_eye_width_wc / SUPER_SAMPLE_RATE_F;
+            let grid_y = dov_eye_width_wc / SUPER_SAMPLE_RATE_F;
+            let off_x = -0.5 * dov_eye_width_wc;
+            let off_y = -0.5 * dov_eye_height_wc;
+            pixels.par_iter_mut().for_each(|pixel| {
+                let frag_coord = [pixel.x_f, pixel.y_f];
+                let test_ray =
+                    get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                let focus_point_wc = test_ray.origin._add(&test_ray.direction.scalar_mul(focus_plane_to_eye_dist));
+                let mut camera_up = look_at_mat._get_column(1);
+                let mut camera_right = look_at_mat._get_column(0);
+                let rand_colors: Vec<Vec3> = super_sample_indices.par_iter().map(|idx| {
+                    let mut random_generator = rand::thread_rng();
+                    let jitter_x = random_generator.gen_range(0.0, grid_x);
+                    let jitter_y = random_generator.gen_range(0.0, grid_y);
+                    let base_x = idx.0 as f32 * grid_x;
+                    let base_y = idx.1 as f32 * grid_y;
+                    let r = jitter_x + base_x + off_x;
+                    let u = jitter_y + base_y + off_y;
+                    let up = camera_up.scalar_mul(u);
+                    let right = camera_right.scalar_mul(r);
+                    let mut cam_pos = eye_pos._add(&right);
+                    cam_pos.add_(&up);
+                    let mut dir = focus_point_wc._minus(&cam_pos);
+                    dir.normalize_();
+                    let ray = Ray {
+                        origin: cam_pos,
+                        direction: dir,
+                    };
+                    let color_f = shade(ray, &objects, &materials, &lights, false, false);
+                    return color_f;
+                }).collect();
+                pixel.clear_color();
+                rand_colors
+                    .iter()
+                    .for_each(|color| pixel.update_color(color));
+            });
+            rendered = true;
+        }
+        if rendered {
+            frame_buffer_image
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(idx, pixel)| {
+                    let pix: &Pixel = pixels.get(idx).unwrap();
+                    *pixel = pix.get_color_u8();
+                });
+            let after = now.elapsed().as_millis();
+            let t = after - before;
+            if super_sampled {
+                println!(
+                    "Took {} ms to super-sample one frame, super-sample rate = {}X",
+                    t, SUPER_SAMPLE_RATE
+                );
+            } else {
+                println!("Took {} ms to render one frame", t);
+            }
+            render_time_ema.add_stat(t as f32);
+            println!("Render time EMA = {}", render_time_ema.get());
+        }
         state.reset_flags();
+        eye_changed = false;
     });
 }
 
-#[inline]
-fn to_color(mut color: Vec3) -> Color {
-    clamp_(&mut color);
-    color.scalar_mul_(255.);
-    let x = color.r().round();
-    let y = color.g().round();
-    let z = color.b().round();
-    Color::rgb(x as u8, y as u8, z as u8)
-}
-
-#[inline]
-fn clamp_(color: &mut Vec3) {
-    color.set_r(clamp_float(color.r()));
-    color.set_g(clamp_float(color.g()));
-    color.set_b(clamp_float(color.b()));
-}
-
-#[inline]
-fn clamp_float(x: f32) -> f32 {
-    if x < 0. {
-        return 0.;
-    }
-    if x > 1. {
-        return 1.;
-    }
-    x
-}
