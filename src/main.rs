@@ -8,9 +8,9 @@ use std::ops::{Index, IndexMut};
 use std::time::Instant;
 
 use num_traits::Pow;
-use pixel_canvas::{Canvas, Color, XY};
 use pixel_canvas::input::glutin::event::VirtualKeyCode;
 use pixel_canvas::input::glutin::event::VirtualKeyCode::W;
+use pixel_canvas::{Canvas, Color, XY};
 use rand::prelude::*;
 use rayon::prelude::*;
 
@@ -278,8 +278,7 @@ impl EMA {
     }
 }
 
-pub struct Pixel
-{
+pub struct Pixel {
     pub x: usize,
     pub y: usize,
     pub x_f: f32,
@@ -289,12 +288,9 @@ pub struct Pixel
     ema_b: EMA,
 }
 
-impl Pixel
-{
-    pub fn new_ema_pixel(x: usize, y: usize, alpha: f32) -> Self
-    {
-        Pixel
-        {
+impl Pixel {
+    pub fn new_ema_pixel(x: usize, y: usize, alpha: f32) -> Self {
+        Pixel {
             x,
             y,
             x_f: x as f32,
@@ -305,25 +301,25 @@ impl Pixel
         }
     }
 
-    pub fn update_color(&mut self, color_f: &Vec3)
-    {
+    pub fn update_color(&mut self, color_f: &Vec3) {
         self.ema_r.add_stat(color_f.r());
         self.ema_g.add_stat(color_f.g());
         self.ema_b.add_stat(color_f.b());
     }
 
-    pub fn get_color_f(&self) -> Vec3
-    {
+    pub fn get_color_f(&self) -> Vec3 {
         Vec3::new_rgb(self.ema_r.get(), self.ema_g.get(), self.ema_b.get())
     }
 
-    pub fn get_color_u8(&self) -> Color
-    {
-        to_color(Vec3::new_rgb(self.ema_r.get(), self.ema_g.get(), self.ema_b.get()))
+    pub fn get_color_u8(&self) -> Color {
+        to_color(Vec3::new_rgb(
+            self.ema_r.get(),
+            self.ema_g.get(),
+            self.ema_b.get(),
+        ))
     }
 
-    pub fn clear_color(&mut self)
-    {
+    pub fn clear_color(&mut self) {
         self.ema_r.clear();
         self.ema_g.clear();
         self.ema_b.clear();
@@ -369,10 +365,8 @@ fn main() {
     let avg_last_frame_num = 10.0;
     let alpha = 1.0 - 1.0 / avg_last_frame_num;
     let mut pixels = Vec::new();
-    for x in 0..HEIGHT
-    {
-        for y in 0..WIDTH
-        {
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
             pixels.push(Pixel::new_ema_pixel(x, y, alpha));
         }
     }
@@ -533,16 +527,17 @@ fn main() {
         // multi-pass render
         let mut rendered = false;
         if eye_changed {
-            pixels.iter_mut().for_each(|pixel| {
+            pixels.par_iter_mut().for_each(|pixel| {
                 let frag_coord = [pixel.x_f, pixel.y_f];
-                let primary_ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                let primary_ray =
+                    get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
                 pixel.update_color(&shade(primary_ray, &objects, &materials, &lights));
             });
             super_sampled = false;
             rendered = true;
         } else if enable_super_sample && !super_sampled {
-            pixels.iter_mut().for_each(|pixel| {
-                let grid_size = 1.0 / SUPER_SAMPLE_RATE_F;
+            let grid_size = 1.0 / SUPER_SAMPLE_RATE_F;
+            pixels.par_iter_mut().for_each(|pixel| {
                 let rand_colors: Vec<Vec3> = super_sample_indices
                     .par_iter()
                     .map(|idx| {
@@ -554,17 +549,15 @@ fn main() {
                         let rand_x = grid_base_x + random_generator.gen_range(0.0, grid_size);
                         let rand_y = grid_base_y + random_generator.gen_range(0.0, grid_size);
                         let frag_coord = [rand_x, rand_y];
-                        let rand_ray = get_ray_perspective(
-                            fov_radian,
-                            &look_at_mat,
-                            &eye_pos,
-                            &frag_coord,
-                        );
+                        let rand_ray =
+                            get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
                         let color_f = shade(rand_ray, &objects, &materials, &lights);
                         return color_f;
                     })
                     .collect();
-                rand_colors.iter().for_each(|color| pixel.update_color(color));
+                rand_colors
+                    .iter()
+                    .for_each(|color| pixel.update_color(color));
             });
             super_sampled = true;
             rendered = true;
@@ -574,8 +567,6 @@ fn main() {
                 .par_iter_mut()
                 .enumerate()
                 .for_each(|(idx, pixel)| {
-                    // let y = idx / WIDTH;
-                    // let x = idx % WIDTH;
                     let pix: &Pixel = pixels.get(idx).unwrap();
                     *pixel = pix.get_color_u8();
                 });
