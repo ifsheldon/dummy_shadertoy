@@ -160,11 +160,10 @@ pub fn look_at(eye: &Vec3, center: &Vec3, up: &Vec3) -> Mat3 {
 }
 
 #[inline]
-pub fn ray_direction_perspective(_fov_radian: f32, frag_coord: &[f32; 2]) -> Vec3 {
+pub fn ray_direction_perspective(fov_radian: f32, frag_coord: &[f32; 2]) -> Vec3 {
     let x = frag_coord[0] - WIDTH_HF + 0.5;
     let y = frag_coord[1] - HEIGHT_HF + 0.5;
-    // let z = HEIGHT_F / (fov_radian / 2.).tan();
-    let z = HEIGHT_HF; // 2.0 = (VIEW_PLANE_WIDTH /2) / |-1| (cam position)
+    let z = HEIGHT_F / (fov_radian / 2.).tan();
     let mut v = Vec3::new_xyz(x, y, z);
     v.normalize_();
     return v;
