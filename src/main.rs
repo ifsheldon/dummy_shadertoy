@@ -232,9 +232,7 @@ pub fn cast_hit_ray(ray: &Ray, objects: &Vec<Object>) -> Option<(i32, Vec3)> {
 #[derive(PartialEq, Debug)]
 pub enum Mode {
     Orbit,
-    FreeMove,
     Zoom,
-    MovingLight,
     AutoMoveCam,
 }
 
@@ -365,7 +363,6 @@ fn main() {
     let soft_shadow_pass_num = 5;
     let mut pass_num = 0;
     let mut clear_before_drawing = false;
-    let eye_pos_original = eye_pos.clone();
     let mut center = Vec3::new(0.);
     let center_original = center.clone();
     let up = Vec3::new_xyz(0.0, 1.0, 0.0);
@@ -470,11 +467,6 @@ fn main() {
                     clear_before_drawing = true;
                     println!("Chose Mode: {:?}", mode);
                 }
-                VirtualKeyCode::Key3 => {
-                    mode = Mode::FreeMove;
-                    clear_before_drawing = true;
-                    println!("Chose Mode: {:?}", mode);
-                }
                 VirtualKeyCode::Key4 => {
                     mode = Mode::AutoMoveCam;
                     println!("Chose Mode: {:?}", mode);
@@ -483,26 +475,7 @@ fn main() {
                     mode = Mode::Zoom;
                     println!("Chose Mode: {:?}", mode);
                 }
-                VirtualKeyCode::V => {
-                    mode = Mode::MovingLight;
-                    println!("Chose Mode: {:?}", mode);
-                }
                 _ => switching_mode = false,
-            }
-        }
-        // moving the light
-        if !switching_mode && state.received_keycode && mode == Mode::MovingLight {
-            let light = lights.get_mut(0).unwrap();
-            let light_pos = &mut light.position;
-            match state.keycode {
-                VirtualKeyCode::A => light_pos.set_x(light_pos.x() - 0.1),
-                VirtualKeyCode::D => light_pos.set_x(light_pos.x() + 0.1),
-                VirtualKeyCode::W => light_pos.set_z(light_pos.z() + 0.1),
-                VirtualKeyCode::S => light_pos.set_z(light_pos.z() - 0.1),
-                VirtualKeyCode::Q => light_pos.set_y(light_pos.y() + 0.1),
-                VirtualKeyCode::E => light_pos.set_y(light_pos.y() - 0.1),
-                VirtualKeyCode::R => *light_pos = light.original_position.clone(),
-                _ => {}
             }
         }
         // Orbiting camera
@@ -546,22 +519,6 @@ fn main() {
             eye_pos.set_y(phi.cos() * radius);
             eye_pos.set_z(-theta.cos() * radius * phi.sin());
             eye_pos.set_x(theta.sin() * radius * phi.sin());
-        }
-        // Moving camera in wc
-        if !switching_mode && state.received_keycode && mode == Mode::FreeMove {
-            match state.keycode {
-                VirtualKeyCode::A => eye_pos.set_x(eye_pos.x() - 0.1),
-                VirtualKeyCode::D => eye_pos.set_x(eye_pos.x() + 0.1),
-                VirtualKeyCode::W => eye_pos.set_z(eye_pos.z() + 0.1),
-                VirtualKeyCode::S => eye_pos.set_z(eye_pos.z() - 0.1),
-                VirtualKeyCode::Q => eye_pos.set_y(eye_pos.y() + 0.1),
-                VirtualKeyCode::E => eye_pos.set_y(eye_pos.y() - 0.1),
-                VirtualKeyCode::R => {
-                    eye_pos = eye_pos_original.clone();
-                    center = center_original.clone();
-                }
-                _ => {}
-            }
         }
         let look_at_mat = look_at(&eye_pos, &center, &up);
         // zooming
