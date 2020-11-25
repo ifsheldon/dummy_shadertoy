@@ -325,8 +325,6 @@ impl Pixel {
     }
 }
 
-//TODO: Implement depth of field effect using distribution ray tracing
-//TODO: Implement glossy reflection using distribution ray tracing
 //TODO: Implement environment mapping using spherical projection (15 points) or cube-mapping (25 points)
 
 fn main() {
