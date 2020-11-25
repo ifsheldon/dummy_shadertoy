@@ -289,7 +289,7 @@ pub fn get_ray_perspective(
     eye_pos_wc: &Vec3,
     frag_coord: &[f32; 2],
 ) -> Ray {
-    let view_init_direction = ray_direction_perspective(fov_radian, &frag_coord);
+    let view_init_direction = ray_direction_perspective(fov_radian, &frag_coord); // in eye space
     let wc_ray_dir = look_at_mat.mat_vec_dot(&view_init_direction);
     let primary_ray = Ray {
         origin: eye_pos_wc.clone(),
