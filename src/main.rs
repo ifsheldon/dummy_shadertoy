@@ -634,18 +634,3 @@ fn main() {
     });
 }
 
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_EMA() {
-        let series = [1.0, 1.0, 2.0, 3.0, 2.0, 1.0, 4.0, 5.0, 6.0, 8.0];
-        let mut ema = EMA::new(0.99, true);
-        for i in series.iter() {
-            ema.add_stat(*i);
-            println!("{}", ema.get());
-        }
-    }
-}
