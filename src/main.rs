@@ -6,8 +6,8 @@
 
 use std::time::Instant;
 
-use pixel_canvas::{Canvas, Color};
 use pixel_canvas::input::glutin::event::VirtualKeyCode;
+use pixel_canvas::{Canvas, Color};
 use rand::prelude::*;
 use rayon::prelude::*;
 
@@ -26,8 +26,8 @@ mod err;
 mod shading;
 mod shapes;
 mod state;
-mod transformations;
 mod tex;
+mod transformations;
 mod utils;
 
 const EPSILON: f32 = 0.0001;
@@ -88,11 +88,21 @@ pub fn init_scene() -> Scene {
 
     //gray plane
     let transformation = translate_obj(identity.clone(), &Vec3::new_xyz(0., -1.4, 0.));
-    add_plane(&mut objects, &Vec4::new_xyzw(0., 1.0, 0., 0.), 0, transformation);
+    add_plane(
+        &mut objects,
+        &Vec4::new_xyzw(0., 1.0, 0., 0.),
+        0,
+        transformation,
+    );
 
     //green ellipsoid
     let transformation = translate_obj(identity.clone(), &Vec3::new_xyz(-0.1, 0.0, 0.4));
-    add_ellipsoid(&mut objects, Vec3::new_xyz(0.4, 0.2, 0.4), 2, transformation);
+    add_ellipsoid(
+        &mut objects,
+        Vec3::new_xyz(0.4, 0.2, 0.4),
+        2,
+        transformation,
+    );
 
     // blue rounded cylinder
     let transformation = translate_obj(identity.clone(), &Vec3::new_xyz(-0.5, -0.3, -0.1));
@@ -113,7 +123,6 @@ pub fn init_scene() -> Scene {
     };
 }
 
-
 #[derive(PartialEq, Debug)]
 pub enum Mode {
     Orbit,
@@ -121,12 +130,16 @@ pub enum Mode {
     AutoMoveCam,
 }
 
-
 fn main() {
     const SUPER_SAMPLE_RATE: usize = 2; // super sample cost = super sample rate ^ 2
     const SUPER_SAMPLE_RATE_F: f32 = SUPER_SAMPLE_RATE as f32;
 
-    let tex = Tex2D::from_file(String::from("./tex.jpg"), Interpolation::Bilinear, Tiling::Repeat).expect("What happened?");
+    let tex = Tex2D::from_file(
+        String::from("./tex.jpg"),
+        Interpolation::Bilinear,
+        Tiling::Repeat,
+    )
+    .expect("What happened?");
     let mut super_sample_indices = Vec::new();
     for x in 0..SUPER_SAMPLE_RATE {
         for y in 0..SUPER_SAMPLE_RATE {
@@ -371,7 +384,14 @@ fn main() {
                 if clear_before_drawing || !enable_motion_blur {
                     pixel.clear_color();
                 }
-                pixel.update_color(&shade(primary_ray, &scene, false, enable_glossy, enable_env_mapping, &tex));
+                pixel.update_color(&shade(
+                    primary_ray,
+                    &scene,
+                    false,
+                    enable_glossy,
+                    enable_env_mapping,
+                    &tex,
+                ));
             });
             super_sampled = false;
             doved = false;
@@ -380,7 +400,9 @@ fn main() {
             if clear_before_drawing {
                 clear_before_drawing = false; // reset the flag
             }
-        } else if (enable_super_sample && !super_sampled) || (enable_soft_shadow && pass_num < soft_shadow_pass_num) {
+        } else if (enable_super_sample && !super_sampled)
+            || (enable_soft_shadow && pass_num < soft_shadow_pass_num)
+        {
             let grid_size = 1.0 / SUPER_SAMPLE_RATE_F;
             pixels.par_iter_mut().for_each(|pixel: &mut Pixel| {
                 let rand_colors: Vec<Vec3> = super_sample_indices
@@ -396,12 +418,18 @@ fn main() {
                         let frag_coord = [rand_x, rand_y];
                         let rand_ray =
                             get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
-                        let color_f = shade(rand_ray, &scene, enable_soft_shadow, false, enable_env_mapping, &tex);
+                        let color_f = shade(
+                            rand_ray,
+                            &scene,
+                            enable_soft_shadow,
+                            false,
+                            enable_env_mapping,
+                            &tex,
+                        );
                         return color_f;
                     })
                     .collect();
-                if enable_soft_shadow
-                {
+                if enable_soft_shadow {
                     pixel.set_alpha(1.0 - (1.0 / (soft_shadow_pass_num * 2) as f32));
                 }
                 rand_colors
@@ -424,32 +452,36 @@ fn main() {
             let off_y = -0.5 * dov_eye_height_wc;
             pixels.par_iter_mut().for_each(|pixel: &mut Pixel| {
                 let frag_coord = [pixel.x_f, pixel.y_f];
-                let test_ray =
-                    get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
-                let focus_point_wc = test_ray.origin._add(&test_ray.direction.scalar_mul(focus_plane_to_eye_dist));
-                let  camera_up = look_at_mat._get_column(1);
-                let  camera_right = look_at_mat._get_column(0);
-                let rand_colors: Vec<Vec3> = super_sample_indices.par_iter().map(|idx| {
-                    let mut random_generator = rand::thread_rng();
-                    let jitter_x = random_generator.gen_range(0.0, grid_x);
-                    let jitter_y = random_generator.gen_range(0.0, grid_y);
-                    let base_x = idx.0 as f32 * grid_x;
-                    let base_y = idx.1 as f32 * grid_y;
-                    let r = jitter_x + base_x + off_x;
-                    let u = jitter_y + base_y + off_y;
-                    let up = camera_up.scalar_mul(u);
-                    let right = camera_right.scalar_mul(r);
-                    let mut cam_pos = eye_pos._add(&right);
-                    cam_pos.add_(&up);
-                    let mut dir = focus_point_wc._minus(&cam_pos);
-                    dir.normalize_();
-                    let ray = Ray {
-                        origin: cam_pos,
-                        direction: dir,
-                    };
-                    let color_f = shade(ray, &scene, false, false, enable_env_mapping, &tex);
-                    return color_f;
-                }).collect();
+                let test_ray = get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
+                let focus_point_wc = test_ray
+                    .origin
+                    ._add(&test_ray.direction.scalar_mul(focus_plane_to_eye_dist));
+                let camera_up = look_at_mat._get_column(1);
+                let camera_right = look_at_mat._get_column(0);
+                let rand_colors: Vec<Vec3> = super_sample_indices
+                    .par_iter()
+                    .map(|idx| {
+                        let mut random_generator = rand::thread_rng();
+                        let jitter_x = random_generator.gen_range(0.0, grid_x);
+                        let jitter_y = random_generator.gen_range(0.0, grid_y);
+                        let base_x = idx.0 as f32 * grid_x;
+                        let base_y = idx.1 as f32 * grid_y;
+                        let r = jitter_x + base_x + off_x;
+                        let u = jitter_y + base_y + off_y;
+                        let up = camera_up.scalar_mul(u);
+                        let right = camera_right.scalar_mul(r);
+                        let mut cam_pos = eye_pos._add(&right);
+                        cam_pos.add_(&up);
+                        let mut dir = focus_point_wc._minus(&cam_pos);
+                        dir.normalize_();
+                        let ray = Ray {
+                            origin: cam_pos,
+                            direction: dir,
+                        };
+                        let color_f = shade(ray, &scene, false, false, enable_env_mapping, &tex);
+                        return color_f;
+                    })
+                    .collect();
                 pixel.clear_color();
                 rand_colors
                     .iter()

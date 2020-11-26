@@ -1,9 +1,9 @@
 use rand::prelude::*;
 
-use crate::*;
 use crate::data::{
     Add, Cross, Mat3, Mat4, MatVecDot, Minus, Normalize, Product, ScalarMul, Vec3, Vec4, VecDot,
 };
+use crate::*;
 
 pub struct Scene {
     pub objects: Vec<Object>,
@@ -110,8 +110,7 @@ pub struct Light {
     pub r: f32,
 }
 
-fn get_jittered_pos(pos: &Vec3, right: &Vec3, up: &Vec3, width: f32, height: f32) -> Vec3
-{
+fn get_jittered_pos(pos: &Vec3, right: &Vec3, up: &Vec3, width: f32, height: f32) -> Vec3 {
     let mut random = rand::thread_rng();
     let mut x = random.gen::<f32>() * 2.0 - 1.0;
     let mut y = random.gen::<f32>() * 2.0 - 1.0;
@@ -124,8 +123,7 @@ fn get_jittered_pos(pos: &Vec3, right: &Vec3, up: &Vec3, width: f32, height: f32
     return p;
 }
 
-fn get_jittered_light_pos(light: &Light, pos: &Vec3) -> Vec3
-{
+fn get_jittered_light_pos(light: &Light, pos: &Vec3) -> Vec3 {
     let light_basis = look_at(&light.position, pos, &Vec3::new_xyz(0., 0.0, 1.0));
     let mut random = rand::thread_rng();
     let mut x = random.gen::<f32>() * 2.0 - 1.0;
@@ -332,22 +330,24 @@ pub fn cast_ray(
     let (obj_idx, dist) = shortest_dist_to_surface(objects, &ray.origin, &ray.direction, pre_obj);
     if dist > MAX_DIST - EPSILON {
         *has_hit = false;
-        if enable_env_mapping
-        {
+        if enable_env_mapping {
             let mut pos = ray.origin.clone();
             let dir = ray.direction.clone();
             let mut dist = SPHERE_RADIUS_F - pos.get_length();
             let mut step = 0;
-            while dist > EPSILON && step < MAX_MARCHING_STEPS
-            {
+            while dist > EPSILON && step < MAX_MARCHING_STEPS {
                 pos.add_(&dir.scalar_mul(dist));
                 dist = SPHERE_RADIUS_F - pos.get_length();
-                step+=1;
+                step += 1;
             }
             let theta = (pos.z() / SPHERE_RADIUS_F).acos();
             let mut phi = (pos.y() / pos.x()).atan() * 2.0 + std::f32::consts::PI;
             if pos.x() == 0.0 {
-                phi = if pos.y() > 0.0 { std::f32::consts::FRAC_PI_4 } else { std::f32::consts::FRAC_PI_2 + std::f32::consts::FRAC_PI_4 };
+                phi = if pos.y() > 0.0 {
+                    std::f32::consts::FRAC_PI_4
+                } else {
+                    std::f32::consts::FRAC_PI_2 + std::f32::consts::FRAC_PI_4
+                };
             }
             let v = theta / std::f32::consts::PI;
             let u = phi / (2.0 * std::f32::consts::PI);
@@ -455,55 +455,73 @@ pub fn shade(
         let mut hit_pos = Vec3::_new();
         let mut hit_normal = Vec3::_new();
         let mut k_rg = Vec3::new(1.);
-        let color_local =
-            if enable_glossy && level != 0 {
-                let ray_basis = _look_at(&next_ray.direction, &UP);
-                let ray_up = ray_basis._get_column(1);
-                let ray_right = ray_basis._get_column(0);
-                let mut base_point = next_ray.direction.scalar_mul(1.0);
-                base_point.add_(&next_ray.origin);
-                let glossy_colors: Vec<Vec3> = (0..GLOSSY_LIGHT_NUM).into_iter().map(|_| {
-                    let jitter_point = get_jittered_pos(&base_point, &ray_right, &ray_up, JITTER_DIM, JITTER_DIM);
+        let color_local = if enable_glossy && level != 0 {
+            let ray_basis = _look_at(&next_ray.direction, &UP);
+            let ray_up = ray_basis._get_column(1);
+            let ray_right = ray_basis._get_column(0);
+            let mut base_point = next_ray.direction.scalar_mul(1.0);
+            base_point.add_(&next_ray.origin);
+            let glossy_colors: Vec<Vec3> = (0..GLOSSY_LIGHT_NUM)
+                .into_iter()
+                .map(|_| {
+                    let jitter_point =
+                        get_jittered_pos(&base_point, &ray_right, &ray_up, JITTER_DIM, JITTER_DIM);
                     let mut dir = jitter_point._minus(&next_ray.direction);
                     dir.normalize_();
-                    let glossy_ray = Ray { direction: dir, origin: next_ray.origin.clone() };
+                    let glossy_ray = Ray {
+                        direction: dir,
+                        origin: next_ray.origin.clone(),
+                    };
                     let mut temp1 = Vec3::new(0.0);
                     let mut temp2 = temp1.clone();
                     let mut temp3 = temp1.clone();
-                    let color = cast_ray(&glossy_ray, pre_obj, scene, &mut false, &mut temp1, &mut temp2, &mut temp3, &mut 0, false, enable_env_mapping, env_tex);
+                    let color = cast_ray(
+                        &glossy_ray,
+                        pre_obj,
+                        scene,
+                        &mut false,
+                        &mut temp1,
+                        &mut temp2,
+                        &mut temp3,
+                        &mut 0,
+                        false,
+                        enable_env_mapping,
+                        env_tex,
+                    );
                     return color;
-                }).collect();
-                let mut color = cast_ray(
-                    &next_ray,
-                    pre_obj,
-                    scene,
-                    &mut has_hit,
-                    &mut hit_pos,
-                    &mut hit_normal,
-                    &mut k_rg,
-                    &mut pre_obj,
-                    enable_soft_shadow,
-                    enable_env_mapping,
-                    env_tex,
-                );
-                glossy_colors.iter().for_each(|c| color.add_(c));
-                color.scalar_div_((GLOSSY_LIGHT_NUM + 1) as f32);
-                color
-            } else {
-                cast_ray(
-                    &next_ray,
-                    pre_obj,
-                    scene,
-                    &mut has_hit,
-                    &mut hit_pos,
-                    &mut hit_normal,
-                    &mut k_rg,
-                    &mut pre_obj,
-                    enable_soft_shadow,
-                    enable_env_mapping,
-                    env_tex,
-                )
-            };
+                })
+                .collect();
+            let mut color = cast_ray(
+                &next_ray,
+                pre_obj,
+                scene,
+                &mut has_hit,
+                &mut hit_pos,
+                &mut hit_normal,
+                &mut k_rg,
+                &mut pre_obj,
+                enable_soft_shadow,
+                enable_env_mapping,
+                env_tex,
+            );
+            glossy_colors.iter().for_each(|c| color.add_(c));
+            color.scalar_div_((GLOSSY_LIGHT_NUM + 1) as f32);
+            color
+        } else {
+            cast_ray(
+                &next_ray,
+                pre_obj,
+                scene,
+                &mut has_hit,
+                &mut hit_pos,
+                &mut hit_normal,
+                &mut k_rg,
+                &mut pre_obj,
+                enable_soft_shadow,
+                enable_env_mapping,
+                env_tex,
+            )
+        };
         color_result.add_(&component_k_rg.product(&color_local));
         if !has_hit {
             break;

@@ -1,25 +1,21 @@
-
+use image::io::Reader as ImageReader;
 use image::{DynamicImage, GenericImageView, Rgba};
-use image::io::{Reader as ImageReader};
 
 use crate::data::Vec3;
 use crate::err::ImageCreationError;
 
 #[derive(PartialEq, Debug)]
-pub enum Interpolation
-{
+pub enum Interpolation {
     Bilinear,
     Nearest,
 }
 
-pub enum Tiling
-{
+pub enum Tiling {
     Repeat,
     Clamp,
 }
 
-pub struct Tex2D
-{
+pub struct Tex2D {
     img: DynamicImage,
     width: u32,
     width_f: f32,
@@ -31,22 +27,22 @@ pub struct Tex2D
 
 type ColorF = Vec3;
 
-impl Tex2D
-{
-    pub fn from_file(path: String, interpolation: Interpolation, tiling: Tiling) -> Result<Self, ImageCreationError>
-    {
+impl Tex2D {
+    pub fn from_file(
+        path: String,
+        interpolation: Interpolation,
+        tiling: Tiling,
+    ) -> Result<Self, ImageCreationError> {
         let img;
         match ImageReader::open(path) {
-            Ok(reader) => {
-                match reader.decode() {
-                    Ok(image) => {
-                        img = image;
-                    }
-                    Err(image_error) => {
-                        return Err(ImageCreationError::ImageError(image_error));
-                    }
+            Ok(reader) => match reader.decode() {
+                Ok(image) => {
+                    img = image;
                 }
-            }
+                Err(image_error) => {
+                    return Err(ImageCreationError::ImageError(image_error));
+                }
+            },
             Err(io_error) => {
                 return Err(ImageCreationError::IOError(io_error));
             }
@@ -64,7 +60,11 @@ impl Tex2D
 
     pub fn get_color_f(&self, u: f32, v: f32) -> ColorF {
         let color_u8 = self.get_color_u8(u, v);
-        return ColorF::new_rgb(Self::take_r(&color_u8) / 255.0, Self::take_g(&color_u8) / 255.0, Self::take_b(&color_u8) / 255.0);
+        return ColorF::new_rgb(
+            Self::take_r(&color_u8) / 255.0,
+            Self::take_g(&color_u8) / 255.0,
+            Self::take_b(&color_u8) / 255.0,
+        );
     }
 
     pub fn get_color_u8(&self, u: f32, v: f32) -> Rgba<u8> {
@@ -83,7 +83,8 @@ impl Tex2D
                 let x0y1 = self.img.get_pixel(x_lower, y_upper);
                 let x1y0 = self.img.get_pixel(x_upper, y_lower);
                 let x1y1 = self.img.get_pixel(x_upper, y_upper);
-                let interpolated = Self::biliniear_interpolate_color(&x0y0, &x1y0, &x0y1, &x1y1, x_frac, y_frac);
+                let interpolated =
+                    Self::biliniear_interpolate_color(&x0y0, &x1y0, &x0y1, &x1y1, x_frac, y_frac);
                 interpolated
             }
             Interpolation::Nearest => {
@@ -96,7 +97,14 @@ impl Tex2D
         };
     }
 
-    fn biliniear_interpolate_color(x0y0: &Rgba<u8>, x1y0: &Rgba<u8>, x0y1: &Rgba<u8>, x1y1: &Rgba<u8>, x_frac: f32, y_frac: f32) -> Rgba<u8> {
+    fn biliniear_interpolate_color(
+        x0y0: &Rgba<u8>,
+        x1y0: &Rgba<u8>,
+        x0y1: &Rgba<u8>,
+        x1y1: &Rgba<u8>,
+        x_frac: f32,
+        y_frac: f32,
+    ) -> Rgba<u8> {
         let (x0y0_r, x0y0_g, x0y0_b, x0y0_a) = Self::take_rgba(x0y0);
         let (x1y0_r, x1y0_g, x1y0_b, x1y0_a) = Self::take_rgba(x1y0);
         let (x0y1_r, x0y1_g, x0y1_b, x0y1_a) = Self::take_rgba(x0y1);
@@ -105,7 +113,12 @@ impl Tex2D
         let g = Self::bilinear_interpolate(x0y0_g, x1y0_g, x0y1_g, x1y1_g, x_frac, y_frac);
         let b = Self::bilinear_interpolate(x0y0_b, x1y0_b, x0y1_b, x1y1_b, x_frac, y_frac);
         let a = Self::bilinear_interpolate(x0y0_a, x1y0_a, x0y1_a, x1y1_a, x_frac, y_frac);
-        return Rgba([Self::clamp(r) as u8, Self::clamp(g) as u8, Self::clamp(b) as u8, Self::clamp(a) as u8]);
+        return Rgba([
+            Self::clamp(r) as u8,
+            Self::clamp(g) as u8,
+            Self::clamp(b) as u8,
+            Self::clamp(a) as u8,
+        ]);
     }
 
     fn clamp(v: f32) -> f32 {
@@ -117,9 +130,13 @@ impl Tex2D
         }
         return v;
     }
-    fn take_rgba(color: &Rgba<u8>) -> (f32, f32, f32, f32)
-    {
-        (Self::take_r(color), Self::take_g(color), Self::take_b(color), Self::take_a(color))
+    fn take_rgba(color: &Rgba<u8>) -> (f32, f32, f32, f32) {
+        (
+            Self::take_r(color),
+            Self::take_g(color),
+            Self::take_b(color),
+            Self::take_a(color),
+        )
     }
 
     #[inline]
@@ -142,7 +159,14 @@ impl Tex2D
         color.0[3] as f32
     }
 
-    fn bilinear_interpolate(x0y0: f32, x1y0: f32, x0y1: f32, x1y1: f32, x_frac: f32, y_frac: f32) -> f32 {
+    fn bilinear_interpolate(
+        x0y0: f32,
+        x1y0: f32,
+        x0y1: f32,
+        x1y1: f32,
+        x_frac: f32,
+        y_frac: f32,
+    ) -> f32 {
         let _x_frac = 1.0 - x_frac;
         let _y_frac = 1.0 - y_frac;
         let y0 = Self::mix(x0y0, x1y0, _x_frac);
@@ -156,8 +180,7 @@ impl Tex2D
         return a * alpha + b * beta;
     }
 
-    fn check_uv(&self, u: f32, v: f32) -> (f32, f32)
-    {
+    fn check_uv(&self, u: f32, v: f32) -> (f32, f32) {
         let u_in_bound = Self::in_bound(u);
         let v_in_bound = Self::in_bound(v);
         return if u_in_bound && v_in_bound {
@@ -175,14 +198,18 @@ impl Tex2D
     fn process_coord(&self, v: f32) -> f32 {
         return match self.tiling {
             Tiling::Repeat => v.fract(),
-            Tiling::Clamp => if v < 0.0 { 0.0 } else { 1.0 },
+            Tiling::Clamp => {
+                if v < 0.0 {
+                    0.0
+                } else {
+                    1.0
+                }
+            }
         };
     }
 
     #[inline]
-    fn in_bound(v: f32) -> bool
-    {
+    fn in_bound(v: f32) -> bool {
         v >= 0.0 && v <= 1.0
     }
 }
-

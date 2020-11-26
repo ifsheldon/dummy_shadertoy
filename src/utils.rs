@@ -1,8 +1,8 @@
 use num_traits::Pow;
 use pixel_canvas::Color;
 
-use crate::data::{ScalarMul, Vec3, Vec4, Mat4};
-use crate::shading::{Object, ShapeTypes, Light};
+use crate::data::{Mat4, ScalarMul, Vec3, Vec4};
+use crate::shading::{Light, Object, ShapeTypes};
 
 #[derive(Debug, Copy, Clone)]
 pub struct EMA {
@@ -140,7 +140,6 @@ pub fn add_rounded_cylinder(
     };
     objects.push(o);
 }
-
 
 pub fn add_light(lights: &mut Vec<Light>, position: Vec3, ambient: Vec3, source: Vec3) {
     let l = Light {
