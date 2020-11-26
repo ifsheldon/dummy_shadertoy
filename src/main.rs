@@ -524,13 +524,13 @@ fn main() {
 //     let tex = Tex2D::from_file(String::from("./tex.jpg"), Interpolation::Bilinear, Tiling::Repeat).expect("What happened?");
 //     let mut rendered = false;
 //     canvas.render(move |_, frame_buf| {
+//         if rendered { return; }
 //         frame_buf.par_iter_mut().enumerate().for_each(|(idx, color)| {
 //             let y = idx / WIDTH;
 //             let x = idx % WIDTH;
 //             let u = x as f32 / WIDTH as f32;
 //             let v = y as f32 / HEIGHT as f32;
 //             let rgba = tex.get_color_u8(u, v);
-//             if rendered { return; }
 //             let c = Color {
 //                 r: rgba.0[0],
 //                 g: rgba.0[1],
