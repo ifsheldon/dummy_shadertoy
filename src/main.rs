@@ -295,7 +295,7 @@ fn main() {
                     clear_before_drawing = true;
                     println!("Chose Mode: {:?}", mode);
                 }
-                VirtualKeyCode::Key4 => {
+                VirtualKeyCode::Key2 => {
                     mode = Mode::AutoMoveCam;
                     println!("Chose Mode: {:?}", mode);
                 }
