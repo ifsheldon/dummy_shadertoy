@@ -248,6 +248,9 @@ pub fn phong_lighting(
     }
 }
 
+const SPHERE_RADIUS: usize = 100;
+const SPHERE_RADIUS_F: f32 = SPHERE_RADIUS as f32;
+
 pub fn cast_ray(
     ray: &Ray,
     pre_obj: i32,
@@ -260,11 +263,35 @@ pub fn cast_ray(
     k_rg: &mut Vec3,
     hit_obj: &mut i32,
     enable_soft_shadow: bool,
+    enable_env_mapping: bool,
+    env_tex: &Tex2D,
 ) -> Vec3 {
     let (obj_idx, dist) = shortest_dist_to_surface(objects, &ray.origin, &ray.direction, pre_obj);
     if dist > MAX_DIST - EPSILON {
         *has_hit = false;
-        return Vec3::new_rgb(BACKGROUND_COLOR.0, BACKGROUND_COLOR.1, BACKGROUND_COLOR.2);
+        if enable_env_mapping
+        {
+            let mut pos = ray.origin.clone();
+            let dir = ray.direction.clone();
+            let mut dist = SPHERE_RADIUS_F - pos.get_length();
+            let mut step = 0;
+            while dist > EPSILON && step < MAX_MARCHING_STEPS
+            {
+                pos.add_(&dir.scalar_mul(dist));
+                dist = SPHERE_RADIUS_F - pos.get_length();
+            }
+            let theta = (pos.z() / SPHERE_RADIUS_F).acos();
+            let mut phi = (pos.y() / pos.x()).atan() * 2.0 + std::f32::consts::PI;
+            if pos.x() == 0.0 {
+                phi = if pos.y() > 0.0 { std::f32::consts::FRAC_PI_4 } else { std::f32::consts::FRAC_PI_2 + std::f32::consts::FRAC_PI_4 };
+            }
+            let v = theta / std::f32::consts::PI;
+            let u = phi / (2.0 * std::f32::consts::PI);
+            let color = env_tex.get_color_f(u, v);
+            return color;
+        } else {
+            return Vec3::new_rgb(BACKGROUND_COLOR.0, BACKGROUND_COLOR.1, BACKGROUND_COLOR.2);
+        }
     } else {
         *hit_obj = obj_idx;
         let obj = objects.get(obj_idx as usize).unwrap();
@@ -352,6 +379,8 @@ pub fn shade(
     lights: &Vec<Light>,
     enable_soft_shadow: bool,
     enable_glossy: bool,
+    enable_env_mapping: bool,
+    env_tex: &Tex2D,
 ) -> Vec3 {
     let eps = Vec3::new(EPSILON);
     let mut next_ray = primary_ray.clone();
@@ -379,7 +408,7 @@ pub fn shade(
                     let mut temp1 = Vec3::new(0.0);
                     let mut temp2 = temp1.clone();
                     let mut temp3 = temp1.clone();
-                    let color = cast_ray(&glossy_ray, pre_obj, lights, materials, objects, &mut false, &mut temp1, &mut temp2, &mut temp3, &mut 0, false);
+                    let color = cast_ray(&glossy_ray, pre_obj, lights, materials, objects, &mut false, &mut temp1, &mut temp2, &mut temp3, &mut 0, false, enable_env_mapping, env_tex);
                     return color;
                 }).collect();
                 let mut color = cast_ray(
@@ -394,6 +423,8 @@ pub fn shade(
                     &mut k_rg,
                     &mut pre_obj,
                     enable_soft_shadow,
+                    enable_env_mapping,
+                    env_tex,
                 );
                 glossy_colors.iter().for_each(|c| color.add_(c));
                 color.scalar_div_((GLOSSY_LIGHT_NUM + 1) as f32);
@@ -411,6 +442,8 @@ pub fn shade(
                     &mut k_rg,
                     &mut pre_obj,
                     enable_soft_shadow,
+                    enable_env_mapping,
+                    env_tex,
                 )
             };
         color_result.add_(&component_k_rg.product(&color_local));

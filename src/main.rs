@@ -14,13 +14,14 @@ use rand::prelude::*;
 use rayon::prelude::*;
 
 use crate::data::{Add, Length, Mat4, Minus, Normalize, ScalarDiv, ScalarMul, Vec3, Vec4};
-use crate::utils::*;
 use crate::shading::*;
 use crate::shapes::{
     sdf_cube, sdf_cylinder, sdf_ellipsoid, sdf_plane, sdf_rounded_cylinder, sdf_sphere,
 };
 use crate::state::KeyboardMouseStates;
+use crate::tex::{Interpolation, Tex2D, Tiling};
 use crate::transformations::*;
+use crate::utils::*;
 
 mod data;
 mod err;
@@ -28,6 +29,7 @@ mod shading;
 mod shapes;
 mod state;
 mod transformations;
+mod tex;
 mod utils;
 
 const EPSILON: f32 = 0.0001;
@@ -286,14 +288,13 @@ impl Pixel {
     }
 }
 
-//TODO: Implement environment mapping using spherical projection (15 points) or cube-mapping (25 points)
-
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
     const SUPER_SAMPLE_RATE: usize = 2; // super sample cost = super sample rate ^ 2
     const SUPER_SAMPLE_RATE_F: f32 = SUPER_SAMPLE_RATE as f32;
 
+    let tex = Tex2D::from_file(String::from("./tex.jpg"), Interpolation::Bilinear, Tiling::Repeat).expect("What happened?");
     let mut super_sample_indices = Vec::new();
     for x in 0..SUPER_SAMPLE_RATE {
         for y in 0..SUPER_SAMPLE_RATE {
@@ -315,6 +316,7 @@ fn main() {
     let mut enable_soft_shadow = false;
     let mut enable_dov = false;
     let mut enable_glossy = false;
+    let mut enable_env_mapping = false;
     let original_focus_plane_to_eye_dist = 0.5;
     let mut focus_plane_to_eye_dist = original_focus_plane_to_eye_dist;
     let dov_eye_width_wc = 0.5;
@@ -359,6 +361,18 @@ fn main() {
         let mut switching_mode = true;
         if state.received_keycode {
             match state.keycode {
+                VirtualKeyCode::Key9 =>{
+                    enable_env_mapping = true;
+                    println!("Enabled Sphere Env Mapping");
+                    eye_changed = true;
+                    clear_before_drawing = true;
+                }
+                VirtualKeyCode::Key0 =>{
+                    enable_env_mapping = false;
+                    println!("Disabled Sphere Env Mapping");
+                    eye_changed = true;
+                    clear_before_drawing = true;
+                }
                 VirtualKeyCode::G => {
                     enable_glossy = true;
                     println!("Enable Glossy");
@@ -528,7 +542,7 @@ fn main() {
                 if clear_before_drawing || !enable_motion_blur {
                     pixel.clear_color();
                 }
-                pixel.update_color(&shade(primary_ray, &objects, &materials, &lights, false, enable_glossy));
+                pixel.update_color(&shade(primary_ray, &objects, &materials, &lights, false, enable_glossy, enable_env_mapping, &tex));
             });
             super_sampled = false;
             doved = false;
@@ -553,7 +567,7 @@ fn main() {
                         let frag_coord = [rand_x, rand_y];
                         let rand_ray =
                             get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
-                        let color_f = shade(rand_ray, &objects, &materials, &lights, enable_soft_shadow, false);
+                        let color_f = shade(rand_ray, &objects, &materials, &lights, enable_soft_shadow, false, enable_env_mapping, &tex);
                         return color_f;
                     })
                     .collect();
@@ -597,7 +611,7 @@ fn main() {
                         origin: cam_pos,
                         direction: dir,
                     };
-                    let color_f = shade(ray, &objects, &materials, &lights, false, false);
+                    let color_f = shade(ray, &objects, &materials, &lights, false, false, enable_env_mapping, &tex);
                     return color_f;
                 }).collect();
                 pixel.clear_color();
@@ -633,3 +647,28 @@ fn main() {
     });
 }
 
+// fn main()
+// {
+//     const WIDTH: usize = 512;
+//     const HEIGHT: usize = 512;
+//     let canvas = Canvas::new(WIDTH, HEIGHT).title("Textrue Test");
+//     let tex = Tex2D::from_file(String::from("./tex.jpg"), Interpolation::Bilinear, Tiling::Repeat).expect("What happened?");
+//     let mut rendered = false;
+//     canvas.render(move |_, frame_buf| {
+//         frame_buf.par_iter_mut().enumerate().for_each(|(idx, color)| {
+//             let y = idx / WIDTH;
+//             let x = idx % WIDTH;
+//             let u = x as f32 / WIDTH as f32;
+//             let v = y as f32 / HEIGHT as f32;
+//             let rgba = tex.get_color_u8(u, v);
+//             if rendered { return; }
+//             let c = Color {
+//                 r: rgba.0[0],
+//                 g: rgba.0[1],
+//                 b: rgba.0[2],
+//             };
+//             *color = c;
+//         });
+//         rendered = true;
+//     })
+// }
