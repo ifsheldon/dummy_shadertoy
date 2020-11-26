@@ -361,13 +361,13 @@ fn main() {
         let mut switching_mode = true;
         if state.received_keycode {
             match state.keycode {
-                VirtualKeyCode::Key9 =>{
+                VirtualKeyCode::Key9 => {
                     enable_env_mapping = true;
                     println!("Enabled Sphere Env Mapping");
                     eye_changed = true;
                     clear_before_drawing = true;
                 }
-                VirtualKeyCode::Key0 =>{
+                VirtualKeyCode::Key0 => {
                     enable_env_mapping = false;
                     println!("Disabled Sphere Env Mapping");
                     eye_changed = true;
@@ -535,7 +535,7 @@ fn main() {
         // multi-pass render
         let mut rendered = false;
         if eye_changed || enable_motion_blur || clear_before_drawing {
-            pixels.par_iter_mut().for_each(|pixel| {
+            pixels.par_iter_mut().for_each(|pixel: &mut Pixel| {
                 let frag_coord = [pixel.x_f, pixel.y_f];
                 let primary_ray =
                     get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
@@ -553,7 +553,7 @@ fn main() {
             }
         } else if (enable_super_sample && !super_sampled) || (enable_soft_shadow && pass_num < soft_shadow_pass_num) {
             let grid_size = 1.0 / SUPER_SAMPLE_RATE_F;
-            pixels.par_iter_mut().for_each(|pixel| {
+            pixels.par_iter_mut().for_each(|pixel: &mut Pixel| {
                 let rand_colors: Vec<Vec3> = super_sample_indices
                     .par_iter()
                     .map(|idx| {
@@ -586,7 +586,7 @@ fn main() {
             let grid_y = dov_eye_width_wc / SUPER_SAMPLE_RATE_F;
             let off_x = -0.5 * dov_eye_width_wc;
             let off_y = -0.5 * dov_eye_height_wc;
-            pixels.par_iter_mut().for_each(|pixel| {
+            pixels.par_iter_mut().for_each(|pixel: &mut Pixel| {
                 let frag_coord = [pixel.x_f, pixel.y_f];
                 let test_ray =
                     get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
