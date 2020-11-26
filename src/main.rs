@@ -296,6 +296,7 @@ fn main() {
     const SUPER_SAMPLE_RATE: usize = 2; // super sample cost = super sample rate ^ 2
     const SUPER_SAMPLE_RATE_F: f32 = SUPER_SAMPLE_RATE as f32;
 
+    let tex = Tex2D::from_file(String::from("./tex.jpg"), Interpolation::Bilinear, Tiling::Repeat).expect("What happened?");
     let mut super_sample_indices = Vec::new();
     for x in 0..SUPER_SAMPLE_RATE {
         for y in 0..SUPER_SAMPLE_RATE {
@@ -317,6 +318,7 @@ fn main() {
     let mut enable_soft_shadow = false;
     let mut enable_dov = false;
     let mut enable_glossy = false;
+    let mut enable_env_mapping = false;
     let original_focus_plane_to_eye_dist = 0.5;
     let mut focus_plane_to_eye_dist = original_focus_plane_to_eye_dist;
     let dov_eye_width_wc = 0.5;
@@ -361,6 +363,18 @@ fn main() {
         let mut switching_mode = true;
         if state.received_keycode {
             match state.keycode {
+                VirtualKeyCode::Key9 =>{
+                    enable_env_mapping = true;
+                    println!("Enabled Sphere Env Mapping");
+                    eye_changed = true;
+                    clear_before_drawing = true;
+                }
+                VirtualKeyCode::Key0 =>{
+                    enable_env_mapping = false;
+                    println!("Disabled Sphere Env Mapping");
+                    eye_changed = true;
+                    clear_before_drawing = true;
+                }
                 VirtualKeyCode::G => {
                     enable_glossy = true;
                     println!("Enable Glossy");
@@ -530,7 +544,7 @@ fn main() {
                 if clear_before_drawing || !enable_motion_blur {
                     pixel.clear_color();
                 }
-                pixel.update_color(&shade(primary_ray, &objects, &materials, &lights, false, enable_glossy));
+                pixel.update_color(&shade(primary_ray, &objects, &materials, &lights, false, enable_glossy, enable_env_mapping, &tex));
             });
             super_sampled = false;
             doved = false;
@@ -555,7 +569,7 @@ fn main() {
                         let frag_coord = [rand_x, rand_y];
                         let rand_ray =
                             get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
-                        let color_f = shade(rand_ray, &objects, &materials, &lights, enable_soft_shadow, false);
+                        let color_f = shade(rand_ray, &objects, &materials, &lights, enable_soft_shadow, false, enable_env_mapping, &tex);
                         return color_f;
                     })
                     .collect();
@@ -599,7 +613,7 @@ fn main() {
                         origin: cam_pos,
                         direction: dir,
                     };
-                    let color_f = shade(ray, &objects, &materials, &lights, false, false);
+                    let color_f = shade(ray, &objects, &materials, &lights, false, false, enable_env_mapping, &tex);
                     return color_f;
                 }).collect();
                 pixel.clear_color();

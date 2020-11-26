@@ -69,7 +69,8 @@ impl Tex2D
     }
 
     pub fn get_color_f(&self, u: f32, v: f32) -> ColorF {
-        unimplemented!()
+        let color_u8 = self.get_color_u8(u, v);
+        return ColorF::new_rgb(Self::take_r(&color_u8) / 255.0, Self::take_g(&color_u8) / 255.0, Self::take_b(&color_u8) / 255.0);
     }
 
     pub fn get_color_u8(&self, u: f32, v: f32) -> Rgba<u8> {
@@ -98,7 +99,7 @@ impl Tex2D
                 let idx_y = y_round as u32;
                 self.img.get_pixel(idx_x, idx_y)
             }
-        }
+        };
     }
 
     fn biliniear_interpolate_color(x0y0: &Rgba<u8>, x1y0: &Rgba<u8>, x0y1: &Rgba<u8>, x1y1: &Rgba<u8>, x_frac: f32, y_frac: f32) -> Rgba<u8> {
