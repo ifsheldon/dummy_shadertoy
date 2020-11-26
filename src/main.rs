@@ -43,86 +43,6 @@ const HEIGHT: usize = 480;
 const HEIGHT_F: f32 = HEIGHT as f32;
 const HEIGHT_HF: f32 = HEIGHT_F / 2.;
 
-
-pub fn add_plane(
-    objects: &mut Vec<Object>,
-    coefficients: &Vec4,
-    material_id: usize,
-    transformation: Mat4,
-) {
-    let o = Object {
-        shape: ShapeTypes::Plane(
-            coefficients.x(),
-            coefficients.y(),
-            coefficients.z(),
-            coefficients.w(),
-        ),
-        original_transformation: transformation.clone(),
-        transformation,
-        material_id,
-    };
-    objects.push(o);
-}
-
-pub fn add_sphere(
-    objects: &mut Vec<Object>,
-    radius: f32,
-    material_id: usize,
-    transformation: Mat4,
-) {
-    let o = Object {
-        transformation,
-        original_transformation: transformation.clone(),
-        shape: ShapeTypes::Sphere(radius),
-        material_id,
-    };
-    objects.push(o);
-}
-
-pub fn add_ellipsoid(
-    objects: &mut Vec<Object>,
-    dimensions: Vec3,
-    material_id: usize,
-    transformation: Mat4,
-) {
-    let o = Object {
-        transformation,
-        original_transformation: transformation.clone(),
-        shape: ShapeTypes::Ellipsoid(dimensions.x(), dimensions.y(), dimensions.z()),
-        material_id,
-    };
-    objects.push(o);
-}
-
-pub fn add_rounded_cylinder(
-    objects: &mut Vec<Object>,
-    radius: f32,
-    round_radius: f32,
-    height: f32,
-    material_id: usize,
-    transformation: Mat4,
-) {
-    let o = Object {
-        transformation,
-        original_transformation: transformation.clone(),
-        shape: ShapeTypes::RoundedCylinder(radius, round_radius, height),
-        material_id,
-    };
-    objects.push(o);
-}
-
-
-pub fn add_light(lights: &mut Vec<Light>, position: Vec3, ambient: Vec3, source: Vec3) {
-    let l = Light {
-        position,
-        original_position: position.clone(),
-        ambient,
-        diffuse: source,
-        r: 0.1,
-    };
-    lights.push(l);
-}
-
 pub fn init_scene() -> Scene {
     let mut objects = Vec::new();
     let mut materials = Vec::new();
@@ -193,15 +113,6 @@ pub fn init_scene() -> Scene {
     };
 }
 
-pub fn cast_hit_ray(ray: &Ray, objects: &Vec<Object>) -> Option<(i32, Vec3)> {
-    let (obj_idx, dist) = shortest_dist_to_surface(objects, &ray.origin, &ray.direction, -1);
-    return if dist > MAX_DIST - EPSILON {
-        None
-    } else {
-        let hit_position = ray.origin._add(&ray.direction.scalar_mul(dist));
-        Some((obj_idx, hit_position))
-    };
-}
 
 #[derive(PartialEq, Debug)]
 pub enum Mode {

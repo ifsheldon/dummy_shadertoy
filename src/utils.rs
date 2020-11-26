@@ -1,7 +1,8 @@
 use num_traits::Pow;
 use pixel_canvas::Color;
 
-use crate::data::{ScalarMul, Vec3};
+use crate::data::{ScalarMul, Vec3, Vec4, Mat4};
+use crate::shading::{Object, ShapeTypes, Light};
 
 #[derive(Debug, Copy, Clone)]
 pub struct EMA {
@@ -71,6 +72,85 @@ fn clamp_float(x: f32) -> f32 {
         return 1.;
     }
     x
+}
+
+pub fn add_plane(
+    objects: &mut Vec<Object>,
+    coefficients: &Vec4,
+    material_id: usize,
+    transformation: Mat4,
+) {
+    let o = Object {
+        shape: ShapeTypes::Plane(
+            coefficients.x(),
+            coefficients.y(),
+            coefficients.z(),
+            coefficients.w(),
+        ),
+        original_transformation: transformation.clone(),
+        transformation,
+        material_id,
+    };
+    objects.push(o);
+}
+
+pub fn add_sphere(
+    objects: &mut Vec<Object>,
+    radius: f32,
+    material_id: usize,
+    transformation: Mat4,
+) {
+    let o = Object {
+        transformation,
+        original_transformation: transformation.clone(),
+        shape: ShapeTypes::Sphere(radius),
+        material_id,
+    };
+    objects.push(o);
+}
+
+pub fn add_ellipsoid(
+    objects: &mut Vec<Object>,
+    dimensions: Vec3,
+    material_id: usize,
+    transformation: Mat4,
+) {
+    let o = Object {
+        transformation,
+        original_transformation: transformation.clone(),
+        shape: ShapeTypes::Ellipsoid(dimensions.x(), dimensions.y(), dimensions.z()),
+        material_id,
+    };
+    objects.push(o);
+}
+
+pub fn add_rounded_cylinder(
+    objects: &mut Vec<Object>,
+    radius: f32,
+    round_radius: f32,
+    height: f32,
+    material_id: usize,
+    transformation: Mat4,
+) {
+    let o = Object {
+        transformation,
+        original_transformation: transformation.clone(),
+        shape: ShapeTypes::RoundedCylinder(radius, round_radius, height),
+        material_id,
+    };
+    objects.push(o);
+}
+
+
+pub fn add_light(lights: &mut Vec<Light>, position: Vec3, ambient: Vec3, source: Vec3) {
+    let l = Light {
+        position,
+        original_position: position.clone(),
+        ambient,
+        diffuse: source,
+        r: 0.1,
+    };
+    lights.push(l);
 }
 
 #[cfg(test)]
