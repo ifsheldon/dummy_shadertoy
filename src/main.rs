@@ -288,8 +288,6 @@ impl Pixel {
     }
 }
 
-//TODO: Implement environment mapping using spherical projection (15 points) or cube-mapping (25 points)
-
 fn main() {
     const VIEW_PLANE_WIDTH: f32 = 4.;
     const VIEW_PLANE_HEIGHT: f32 = 3.;
