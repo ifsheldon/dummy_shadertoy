@@ -1,4 +1,4 @@
-use crate::data::{Add, Mat4, Normalize, ScalarMul, Vec3, Vec4, _Mat};
+use crate::data::{Add, Mat4, Normalize, ScalarMul, Vec3, _Mat};
 
 pub fn translate_obj(mat: Mat4, translation: &Vec3) -> Mat4 {
     let mut result = mat.clone();

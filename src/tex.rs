@@ -1,14 +1,9 @@
-use std::fs::File;
-use std::io;
-use std::io::{BufReader, Error};
-use std::mem::take;
 
-use image::{DynamicImage, GenericImageView, ImageError, Rgb, Rgba};
-use image::io::{Reader as ImageReader, Reader};
+use image::{DynamicImage, GenericImageView, Rgba};
+use image::io::{Reader as ImageReader};
 
 use crate::data::Vec3;
 use crate::err::ImageCreationError;
-use crate::utils::to_color;
 
 #[derive(PartialEq, Debug)]
 pub enum Interpolation
@@ -35,7 +30,6 @@ pub struct Tex2D
 }
 
 type ColorF = Vec3;
-type ColorU8 = pixel_canvas::Color;
 
 impl Tex2D
 {

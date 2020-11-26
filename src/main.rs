@@ -4,12 +4,10 @@
 // * Analytical formulas by Inigo Quilez, source: http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
 // * glm source code on https://github.com/g-truc/glm
 
-use std::ops::{Index, IndexMut};
 use std::time::Instant;
 
-use pixel_canvas::{Canvas, Color, XY};
+use pixel_canvas::{Canvas, Color};
 use pixel_canvas::input::glutin::event::VirtualKeyCode;
-use pixel_canvas::input::glutin::event::VirtualKeyCode::W;
 use rand::prelude::*;
 use rayon::prelude::*;
 
@@ -45,22 +43,6 @@ const HEIGHT: usize = 480;
 const HEIGHT_F: f32 = HEIGHT as f32;
 const HEIGHT_HF: f32 = HEIGHT_F / 2.;
 
-pub fn add_cube(
-    objects: &mut Vec<Object>,
-    width: f32,
-    height: f32,
-    depth: f32,
-    material_id: usize,
-    transformation: Mat4,
-) {
-    let o = Object {
-        shape: ShapeTypes::Cube(width, height, depth),
-        original_transformation: transformation.clone(),
-        transformation,
-        material_id,
-    };
-    objects.push(o);
-}
 
 pub fn add_plane(
     objects: &mut Vec<Object>,
@@ -129,21 +111,6 @@ pub fn add_rounded_cylinder(
     objects.push(o);
 }
 
-pub fn add_cylinder(
-    objects: &mut Vec<Object>,
-    radius: f32,
-    height: f32,
-    material_id: usize,
-    transformation: Mat4,
-) {
-    let o = Object {
-        transformation,
-        original_transformation: transformation.clone(),
-        shape: ShapeTypes::Cylinder(radius, height),
-        material_id,
-    };
-    objects.push(o);
-}
 
 pub fn add_light(lights: &mut Vec<Light>, position: Vec3, ambient: Vec3, source: Vec3) {
     let l = Light {
@@ -156,11 +123,10 @@ pub fn add_light(lights: &mut Vec<Light>, position: Vec3, ambient: Vec3, source:
     lights.push(l);
 }
 
-pub fn init_scene(
-    objects: &mut Vec<Object>,
-    materials: &mut Vec<Material>,
-    lights: &mut Vec<Light>,
-) {
+pub fn init_scene() -> Scene {
+    let mut objects = Vec::new();
+    let mut materials = Vec::new();
+    let mut lights = Vec::new();
     let material_gray = Material {
         diffuse: Vec3::new(0.5),
         ambient: Vec3::new(0.1),
@@ -198,28 +164,33 @@ pub fn init_scene(
     let identity = Mat4::identity();
     // red sphere
     let transformation = translate_obj(identity.clone(), &Vec3::new_xyz(1., 1., 0.5));
-    add_sphere(objects, 1., 1, transformation);
+    add_sphere(&mut objects, 1., 1, transformation);
 
     //gray plane
     let transformation = translate_obj(identity.clone(), &Vec3::new_xyz(0., -1.4, 0.));
-    add_plane(objects, &Vec4::new_xyzw(0., 1.0, 0., 0.), 0, transformation);
+    add_plane(&mut objects, &Vec4::new_xyzw(0., 1.0, 0., 0.), 0, transformation);
 
     //green ellipsoid
     let transformation = translate_obj(identity.clone(), &Vec3::new_xyz(-0.1, 0.0, 0.4));
-    add_ellipsoid(objects, Vec3::new_xyz(0.4, 0.2, 0.4), 2, transformation);
+    add_ellipsoid(&mut objects, Vec3::new_xyz(0.4, 0.2, 0.4), 2, transformation);
 
     // blue rounded cylinder
     let transformation = translate_obj(identity.clone(), &Vec3::new_xyz(-0.5, -0.3, -0.1));
     // add_cylinder(objects, 0.1, 0.1, 3, transformation);
-    add_rounded_cylinder(objects, 0.1, 0.02, 0.3, 3, transformation);
+    add_rounded_cylinder(&mut objects, 0.1, 0.02, 0.3, 3, transformation);
 
     //white light
     add_light(
-        lights,
+        &mut lights,
         Vec3::new_xyz(0., 5., 0.),
         Vec3::new(0.3),
         Vec3::new(0.7),
     );
+    return Scene {
+        objects,
+        lights,
+        materials,
+    };
 }
 
 pub fn cast_hit_ray(ray: &Ray, objects: &Vec<Object>) -> Option<(i32, Vec3)> {
@@ -240,66 +211,7 @@ pub enum Mode {
 }
 
 
-pub struct Pixel {
-    pub x: usize,
-    pub y: usize,
-    pub x_f: f32,
-    pub y_f: f32,
-    pub alpha: f32,
-    ema_r: EMA,
-    ema_g: EMA,
-    ema_b: EMA,
-}
-
-impl Pixel {
-    pub fn new_ema_pixel(x: usize, y: usize, alpha: f32) -> Self {
-        Pixel {
-            x,
-            y,
-            x_f: x as f32,
-            y_f: y as f32,
-            alpha,
-            ema_r: EMA::new(alpha, true),
-            ema_g: EMA::new(alpha, true),
-            ema_b: EMA::new(alpha, true),
-        }
-    }
-
-    pub fn update_color(&mut self, color_f: &Vec3) {
-        self.ema_r.add_stat(color_f.r());
-        self.ema_g.add_stat(color_f.g());
-        self.ema_b.add_stat(color_f.b());
-    }
-
-    pub fn get_color_f(&self) -> Vec3 {
-        Vec3::new_rgb(self.ema_r.get(), self.ema_g.get(), self.ema_b.get())
-    }
-
-    pub fn get_color_u8(&self) -> Color {
-        to_color(Vec3::new_rgb(
-            self.ema_r.get(),
-            self.ema_g.get(),
-            self.ema_b.get(),
-        ))
-    }
-
-    pub fn clear_color(&mut self) {
-        self.ema_r.clear();
-        self.ema_g.clear();
-        self.ema_b.clear();
-    }
-
-    pub fn set_alpha(&mut self, alpha: f32) {
-        self.alpha = alpha;
-        self.ema_r.set_alpha(alpha);
-        self.ema_g.set_alpha(alpha);
-        self.ema_b.set_alpha(alpha);
-    }
-}
-
 fn main() {
-    const VIEW_PLANE_WIDTH: f32 = 4.;
-    const VIEW_PLANE_HEIGHT: f32 = 3.;
     const SUPER_SAMPLE_RATE: usize = 2; // super sample cost = super sample rate ^ 2
     const SUPER_SAMPLE_RATE_F: f32 = SUPER_SAMPLE_RATE as f32;
 
@@ -311,10 +223,7 @@ fn main() {
         }
     }
 
-    let mut objects = Vec::new();
-    let mut lights = Vec::new();
-    let mut materials = Vec::new();
-    init_scene(&mut objects, &mut materials, &mut lights);
+    let scene = init_scene();
     let fov_radian = (2.0_f32).atan() * 2.;
 
     let mut eye_pos = Vec3::new_xyz(0.0, 0.0, -1.0);
@@ -551,7 +460,7 @@ fn main() {
                 if clear_before_drawing || !enable_motion_blur {
                     pixel.clear_color();
                 }
-                pixel.update_color(&shade(primary_ray, &objects, &materials, &lights, false, enable_glossy, enable_env_mapping, &tex));
+                pixel.update_color(&shade(primary_ray, &scene, false, enable_glossy, enable_env_mapping, &tex));
             });
             super_sampled = false;
             doved = false;
@@ -576,7 +485,7 @@ fn main() {
                         let frag_coord = [rand_x, rand_y];
                         let rand_ray =
                             get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
-                        let color_f = shade(rand_ray, &objects, &materials, &lights, enable_soft_shadow, false, enable_env_mapping, &tex);
+                        let color_f = shade(rand_ray, &scene, enable_soft_shadow, false, enable_env_mapping, &tex);
                         return color_f;
                     })
                     .collect();
@@ -607,8 +516,8 @@ fn main() {
                 let test_ray =
                     get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
                 let focus_point_wc = test_ray.origin._add(&test_ray.direction.scalar_mul(focus_plane_to_eye_dist));
-                let mut camera_up = look_at_mat._get_column(1);
-                let mut camera_right = look_at_mat._get_column(0);
+                let  camera_up = look_at_mat._get_column(1);
+                let  camera_right = look_at_mat._get_column(0);
                 let rand_colors: Vec<Vec3> = super_sample_indices.par_iter().map(|idx| {
                     let mut random_generator = rand::thread_rng();
                     let jitter_x = random_generator.gen_range(0.0, grid_x);
@@ -627,7 +536,7 @@ fn main() {
                         origin: cam_pos,
                         direction: dir,
                     };
-                    let color_f = shade(ray, &objects, &materials, &lights, false, false, enable_env_mapping, &tex);
+                    let color_f = shade(ray, &scene, false, false, enable_env_mapping, &tex);
                     return color_f;
                 }).collect();
                 pixel.clear_color();

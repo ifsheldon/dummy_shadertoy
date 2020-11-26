@@ -3,6 +3,7 @@ use pixel_canvas::Color;
 
 use crate::data::{ScalarMul, Vec3};
 
+#[derive(Debug, Copy, Clone)]
 pub struct EMA {
     pre: f32,
     alpha: f32,

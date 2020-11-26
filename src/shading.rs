@@ -5,6 +5,70 @@ use crate::data::{
     Add, Cross, Mat3, Mat4, MatVecDot, Minus, Normalize, Product, ScalarMul, Vec3, Vec4, VecDot,
 };
 
+pub struct Scene {
+    pub objects: Vec<Object>,
+    pub lights: Vec<Light>,
+    pub materials: Vec<Material>,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Pixel {
+    pub x: usize,
+    pub y: usize,
+    pub x_f: f32,
+    pub y_f: f32,
+    pub alpha: f32,
+    ema_r: EMA,
+    ema_g: EMA,
+    ema_b: EMA,
+}
+
+impl Pixel {
+    pub fn new_ema_pixel(x: usize, y: usize, alpha: f32) -> Self {
+        Pixel {
+            x,
+            y,
+            x_f: x as f32,
+            y_f: y as f32,
+            alpha,
+            ema_r: EMA::new(alpha, true),
+            ema_g: EMA::new(alpha, true),
+            ema_b: EMA::new(alpha, true),
+        }
+    }
+
+    pub fn update_color(&mut self, color_f: &Vec3) {
+        self.ema_r.add_stat(color_f.r());
+        self.ema_g.add_stat(color_f.g());
+        self.ema_b.add_stat(color_f.b());
+    }
+
+    pub fn get_color_f(&self) -> Vec3 {
+        Vec3::new_rgb(self.ema_r.get(), self.ema_g.get(), self.ema_b.get())
+    }
+
+    pub fn get_color_u8(&self) -> Color {
+        to_color(Vec3::new_rgb(
+            self.ema_r.get(),
+            self.ema_g.get(),
+            self.ema_b.get(),
+        ))
+    }
+
+    pub fn clear_color(&mut self) {
+        self.ema_r.clear();
+        self.ema_g.clear();
+        self.ema_b.clear();
+    }
+
+    pub fn set_alpha(&mut self, alpha: f32) {
+        self.alpha = alpha;
+        self.ema_r.set_alpha(alpha);
+        self.ema_g.set_alpha(alpha);
+        self.ema_b.set_alpha(alpha);
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct Ray {
     pub origin: Vec3,
@@ -51,8 +115,8 @@ fn get_jittered_pos(pos: &Vec3, right: &Vec3, up: &Vec3, width: f32, height: f32
     let mut random = rand::thread_rng();
     let mut x = random.gen::<f32>() * 2.0 - 1.0;
     let mut y = random.gen::<f32>() * 2.0 - 1.0;
-    x *= (width / 2.0);
-    y *= (height / 2.0);
+    x *= width / 2.0;
+    y *= height / 2.0;
     let r = right.scalar_mul(x);
     let u = up.scalar_mul(y);
     let mut p = pos._add(&r);
@@ -254,9 +318,7 @@ const SPHERE_RADIUS_F: f32 = SPHERE_RADIUS as f32;
 pub fn cast_ray(
     ray: &Ray,
     pre_obj: i32,
-    lights: &Vec<Light>,
-    materials: &Vec<Material>,
-    objects: &Vec<Object>,
+    scene: &Scene,
     has_hit: &mut bool,
     hit_pos: &mut Vec3,
     hit_normal: &mut Vec3,
@@ -266,6 +328,7 @@ pub fn cast_ray(
     enable_env_mapping: bool,
     env_tex: &Tex2D,
 ) -> Vec3 {
+    let objects = &scene.objects;
     let (obj_idx, dist) = shortest_dist_to_surface(objects, &ray.origin, &ray.direction, pre_obj);
     if dist > MAX_DIST - EPSILON {
         *has_hit = false;
@@ -279,6 +342,7 @@ pub fn cast_ray(
             {
                 pos.add_(&dir.scalar_mul(dist));
                 dist = SPHERE_RADIUS_F - pos.get_length();
+                step+=1;
             }
             let theta = (pos.z() / SPHERE_RADIUS_F).acos();
             let mut phi = (pos.y() / pos.x()).atan() * 2.0 + std::f32::consts::PI;
@@ -299,10 +363,10 @@ pub fn cast_ray(
         let ref_pos = ray.origin._add(&ray.direction.scalar_mul(dist));
         *hit_pos = ref_pos.clone();
         *hit_normal = estimate_normal(&ref_pos, objects);
-        let hit_material = materials.get(obj.material_id).unwrap();
+        let hit_material = scene.materials.get(obj.material_id).unwrap();
         *k_rg = hit_material.global_reflection.clone();
         let mut local_color = Vec3::new(0.);
-        for l in lights {
+        for l in scene.lights.iter() {
             let shadow_ray = if enable_soft_shadow {
                 let light_pos = get_jittered_light_pos(l, hit_pos);
                 light_pos._minus(hit_pos)
@@ -370,13 +434,11 @@ pub fn get_ray_orthogonal(
 }
 
 const GLOSSY_LIGHT_NUM: usize = 3;
-const JITTER_DIM: f32 = 0.01;
+const JITTER_DIM: f32 = 0.001;
 
 pub fn shade(
     primary_ray: Ray,
-    objects: &Vec<Object>,
-    materials: &Vec<Material>,
-    lights: &Vec<Light>,
+    scene: &Scene,
     enable_soft_shadow: bool,
     enable_glossy: bool,
     enable_env_mapping: bool,
@@ -396,27 +458,25 @@ pub fn shade(
         let color_local =
             if enable_glossy && level != 0 {
                 let ray_basis = _look_at(&next_ray.direction, &UP);
-                let mut ray_up = ray_basis._get_column(1);
-                let mut ray_right = ray_basis._get_column(0);
+                let ray_up = ray_basis._get_column(1);
+                let ray_right = ray_basis._get_column(0);
                 let mut base_point = next_ray.direction.scalar_mul(1.0);
                 base_point.add_(&next_ray.origin);
                 let glossy_colors: Vec<Vec3> = (0..GLOSSY_LIGHT_NUM).into_iter().map(|_| {
-                    let jitter_point = get_jittered_pos(&base_point, &ray_right, &ray_up, 0.001, 0.001);
+                    let jitter_point = get_jittered_pos(&base_point, &ray_right, &ray_up, JITTER_DIM, JITTER_DIM);
                     let mut dir = jitter_point._minus(&next_ray.direction);
                     dir.normalize_();
                     let glossy_ray = Ray { direction: dir, origin: next_ray.origin.clone() };
                     let mut temp1 = Vec3::new(0.0);
                     let mut temp2 = temp1.clone();
                     let mut temp3 = temp1.clone();
-                    let color = cast_ray(&glossy_ray, pre_obj, lights, materials, objects, &mut false, &mut temp1, &mut temp2, &mut temp3, &mut 0, false, enable_env_mapping, env_tex);
+                    let color = cast_ray(&glossy_ray, pre_obj, scene, &mut false, &mut temp1, &mut temp2, &mut temp3, &mut 0, false, enable_env_mapping, env_tex);
                     return color;
                 }).collect();
                 let mut color = cast_ray(
                     &next_ray,
                     pre_obj,
-                    lights,
-                    materials,
-                    objects,
+                    scene,
                     &mut has_hit,
                     &mut hit_pos,
                     &mut hit_normal,
@@ -433,9 +493,7 @@ pub fn shade(
                 cast_ray(
                     &next_ray,
                     pre_obj,
-                    lights,
-                    materials,
-                    objects,
+                    scene,
                     &mut has_hit,
                     &mut hit_pos,
                     &mut hit_normal,
