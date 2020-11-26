@@ -245,6 +245,7 @@ pub struct Pixel {
     pub y: usize,
     pub x_f: f32,
     pub y_f: f32,
+    pub alpha: f32,
     ema_r: EMA,
     ema_g: EMA,
     ema_b: EMA,
@@ -257,6 +258,7 @@ impl Pixel {
             y,
             x_f: x as f32,
             y_f: y as f32,
+            alpha,
             ema_r: EMA::new(alpha, true),
             ema_g: EMA::new(alpha, true),
             ema_b: EMA::new(alpha, true),
@@ -285,6 +287,13 @@ impl Pixel {
         self.ema_r.clear();
         self.ema_g.clear();
         self.ema_b.clear();
+    }
+
+    pub fn set_alpha(&mut self, alpha: f32) {
+        self.alpha = alpha;
+        self.ema_r.set_alpha(alpha);
+        self.ema_g.set_alpha(alpha);
+        self.ema_b.set_alpha(alpha);
     }
 }
 
@@ -571,9 +580,16 @@ fn main() {
                         return color_f;
                     })
                     .collect();
+                if enable_soft_shadow
+                {
+                    pixel.set_alpha(1.0 - (1.0 / (soft_shadow_pass_num * 2) as f32));
+                }
                 rand_colors
                     .iter()
                     .for_each(|color| pixel.update_color(color));
+                if enable_soft_shadow && pass_num == soft_shadow_pass_num - 1 {
+                    pixel.set_alpha(alpha);
+                }
             });
             super_sampled = true;
             rendered = true;
