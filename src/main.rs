@@ -14,13 +14,14 @@ use rand::prelude::*;
 use rayon::prelude::*;
 
 use crate::data::{Add, Length, Mat4, Minus, Normalize, ScalarDiv, ScalarMul, Vec3, Vec4};
-use crate::utils::*;
 use crate::shading::*;
 use crate::shapes::{
     sdf_cube, sdf_cylinder, sdf_ellipsoid, sdf_plane, sdf_rounded_cylinder, sdf_sphere,
 };
 use crate::state::KeyboardMouseStates;
+use crate::tex::{Interpolation, Tex2D, Tiling};
 use crate::transformations::*;
+use crate::utils::*;
 
 mod data;
 mod err;
@@ -634,3 +635,28 @@ fn main() {
     });
 }
 
+// fn main()
+// {
+//     const WIDTH: usize = 512;
+//     const HEIGHT: usize = 512;
+//     let canvas = Canvas::new(WIDTH, HEIGHT).title("Textrue Test");
+//     let tex = Tex2D::from_file(String::from("./tex.jpg"), Interpolation::Bilinear, Tiling::Repeat).expect("What happened?");
+//     let mut rendered = false;
+//     canvas.render(move |_, frame_buf| {
+//         frame_buf.par_iter_mut().enumerate().for_each(|(idx, color)| {
+//             let y = idx / WIDTH;
+//             let x = idx % WIDTH;
+//             let u = x as f32 / WIDTH as f32;
+//             let v = y as f32 / HEIGHT as f32;
+//             let rgba = tex.get_color_u8(u, v);
+//             if rendered { return; }
+//             let c = Color {
+//                 r: rgba.0[0],
+//                 g: rgba.0[1],
+//                 b: rgba.0[2],
+//             };
+//             *color = c;
+//         });
+//         rendered = true;
+//     })
+// }

@@ -49,6 +49,7 @@ impl fmt::Display for OutOfBoundError
     }
 }
 
+#[derive(Debug)]
 pub enum ImageCreationError
 {
     IOError(std::io::Error),
