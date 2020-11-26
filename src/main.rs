@@ -483,6 +483,7 @@ fn main() {
     });
 }
 
+// For demonstrating interpolations
 // fn main()
 // {
 //     const WIDTH: usize = 512;
