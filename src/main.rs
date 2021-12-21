@@ -139,7 +139,7 @@ fn main() {
         Interpolation::Bilinear,
         Tiling::Repeat,
     )
-    .expect("What happened?");
+        .expect("What happened?");
     let mut super_sample_indices = Vec::new();
     for x in 0..SUPER_SAMPLE_RATE {
         for y in 0..SUPER_SAMPLE_RATE {
@@ -232,7 +232,7 @@ fn main() {
                     println!("Enabled Super Sample");
                     eye_changed = true;
                 }
-                VirtualKeyCode::Subtract | VirtualKeyCode::Minus => {
+                VirtualKeyCode::Minus => {
                     enable_super_sample = false;
                     println!("Disabled Super Sample");
                     eye_changed = true;
@@ -413,8 +413,8 @@ fn main() {
                         let grid_y = idx.1;
                         let grid_base_x = pixel.x_f + grid_x as f32 * grid_size;
                         let grid_base_y = pixel.y_f + grid_y as f32 * grid_size;
-                        let rand_x = grid_base_x + random_generator.gen_range(0.0, grid_size);
-                        let rand_y = grid_base_y + random_generator.gen_range(0.0, grid_size);
+                        let rand_x = grid_base_x + random_generator.gen_range(0.0..grid_size);
+                        let rand_y = grid_base_y + random_generator.gen_range(0.0..grid_size);
                         let frag_coord = [rand_x, rand_y];
                         let rand_ray =
                             get_ray_perspective(fov_radian, &look_at_mat, &eye_pos, &frag_coord);
@@ -462,8 +462,8 @@ fn main() {
                     .par_iter()
                     .map(|idx| {
                         let mut random_generator = rand::thread_rng();
-                        let jitter_x = random_generator.gen_range(0.0, grid_x);
-                        let jitter_y = random_generator.gen_range(0.0, grid_y);
+                        let jitter_x = random_generator.gen_range(0.0..grid_x);
+                        let jitter_y = random_generator.gen_range(0.0..grid_y);
                         let base_x = idx.0 as f32 * grid_x;
                         let base_y = idx.1 as f32 * grid_y;
                         let r = jitter_x + base_x + off_x;
